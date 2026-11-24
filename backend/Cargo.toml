@@ -2,7 +2,7 @@
 name = "dev_backupsplus_backups"
 description = "Automatic server backups with freely configurable routines, rotation and cleanup."
 authors = ["Luis-1805"]
-version = "2.3.0"
+version = "2.4.0"
 edition = { workspace = true }
 
 [dependencies]
