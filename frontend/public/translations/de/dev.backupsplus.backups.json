@@ -26,6 +26,8 @@
       "notAvailable": "–"
     },
     "cron": {
+      "everyMinute": "Jede Minute",
+      "every5m": "Alle 5 Minuten",
       "every15m": "Alle 15 Minuten",
       "every30m": "Alle 30 Minuten",
       "hourly": "Stündlich (zur vollen Stunde)",
@@ -47,6 +49,7 @@
       "version": "Backups Plus · Oberfläche v{frontend} · installiert v{installed}",
       "title": "Auto-Backups",
       "button": {
+        "saveOverride": "Abstand speichern",
         "runNow": "Jetzt sichern",
         "runRoutine": "Jetzt ausführen",
         "applyTemplate": "Vorlage anwenden",
@@ -89,12 +92,17 @@
         "customTemplate": "{name} (eigene)",
         "enabled": "Automatische Backups aktiv",
         "deleteFailed": "Fehlgeschlagene Backups automatisch löschen",
+        "minInterval": "Kleinster Abstand neuer Backups einer Routine: {interval}",
+        "overrideEnabled": "Eigener Mindestabstand für diesen Server (global: {global})",
+        "override": "Mindestabstand für diesen Server",
         "confirmTemplate": "Vorlage „{name}“ anwenden? Die bisherigen Routinen werden ersetzt. Vorhandene Backups bleiben erhalten, werden aber keiner Routine mehr zugeordnet."
       },
       "routines": {
         "title": "Routinen",
         "intro": "Jede Routine behält ihre neuesten Backups. Eine Routine vom Typ „übernehmen“ erstellt keine eigenen Backups: Fällt ein Backup aus ihrer Quelle heraus und sie ist laut Zeitplan dran, wird es übernommen statt gelöscht – so entstehen z. B. wöchentliche und monatliche Backups ohne Zusatzaufwand.",
-        "status": "Backups: {count}/{keep} · letzter Lauf: {last} · nächster: {next}"
+        "status": "Backups: {count}/{keep} · letzter Lauf: {last} · nächster: {next}",
+        "throttled": "Höchstens alle {interval}",
+        "throttledHint": "Der Zeitplan läuft öfter, als der Mindestabstand von {interval} erlaubt. Zu frühe Läufe werden ausgelassen."
       },
       "backups": {
         "title": "Verwaltete Backups",
@@ -125,6 +133,7 @@
         "empty": "Noch keine Einträge."
       },
       "toast": {
+        "overrideSaved": "Mindestabstand gespeichert.",
         "saved": "Gespeichert. Automatische Backups sind aktiv.",
         "savedPaused": "Gespeichert (pausiert).",
         "templateApplied": "Vorlage „{name}“ angewendet und aktiviert.",
@@ -190,8 +199,8 @@
         "defaultTemplateDescription": "Wird Servern ohne Einrichtung vorgeschlagen.",
         "defaultTimezone": "Standard-Zeitzone",
         "defaultTimezoneDescription": "Für Server ohne eigene Zeitzone, deren Node auch keine meldet. Leer = UTC.",
-        "minInterval": "Kleinster Abstand neuer Backups (Minuten)",
-        "minIntervalDescription": "5 Minuten bis 7 Tage (10.080). 60 = höchstens ein Backup pro Stunde.",
+        "minInterval": "Kleinster Abstand neuer Backups einer Routine",
+        "minIntervalDescription": "5 Sekunden bis 7 Tage. Gilt sofort auch für bestehende Routinen; Admins können ihn pro Server überschreiben.",
         "maxKeep": "Max. behaltene Backups pro Server",
         "maxRoutines": "Max. Routinen pro Server",
         "perTick": "Max. Server pro Minute",

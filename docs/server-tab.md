@@ -74,10 +74,14 @@ it back on makes every routine due immediately. Changes here are applied with th
 **Delete failed backups automatically** — when a backup fails (e.g. the node was offline), it is deleted on the next
 rotation. Switch off to keep failed backups for troubleshooting; they are then shown as *Failed*.
 
+Below the switches the card shows the **minimum interval** that applies to this server. Admins can set an own value for
+the server here — see [Administration](admin.md#minimum-interval-per-server).
+
 ## Routines
 
 The routine editor shows one card per routine. All fields are explained in the
-[routine reference](routines.md). On each saved routine card you additionally see:
+[routine reference](routines.md). Click a routine's name (or the arrow next to it) to **collapse** it to a single line
+with its schedule; your browser remembers which routines are collapsed. On each saved routine card you additionally see:
 
 ```text
 Backups: 3/3 · last run: 24.11.26, 13:00 · next: 24.11.26, 14:00      [Run now]
@@ -86,6 +90,8 @@ Backups: 3/3 · last run: 24.11.26, 13:00 · next: 24.11.26, 14:00      [Run now
 - **Backups x/y** — how many backups belong to the routine / how many it keeps
 - **last run / next** — when the routine last ran and when it is due next (in your browser's local time)
 - **Run now** — only for *create* routines
+- **At most every …** — the schedule runs more often than the [minimum interval](routines.md) allows; runs that come
+  too early are skipped
 
 Buttons below the editor:
 

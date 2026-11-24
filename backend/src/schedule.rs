@@ -95,6 +95,57 @@ pub fn min_gap(
     gap
 }
 
+/// Toleranz beim Prüfen des Cron-Abstands (Sommerzeit): 1/24 des Abstands, höchstens 1 h.
+pub fn interval_tolerance(min_seconds: u32) -> chrono::Duration {
+    chrono::Duration::seconds((min_seconds / 24).min(3600) as i64)
+}
+
+/// Plant der Cron-Ausdruck öfter, als der Mindestabstand erlaubt?
+pub fn too_frequent(
+    cron: &croner::Cron,
+    timezone: chrono_tz::Tz,
+    now: chrono::NaiveDateTime,
+    min_seconds: u32,
+) -> bool {
+    min_gap(cron, timezone, now).is_some_and(|gap| {
+        gap < chrono::Duration::seconds(min_seconds as i64) - interval_tolerance(min_seconds)
+    })
+}
+
+/// Frühester Zeitpunkt für das nächste neue Backup einer zu häufigen Routine
+/// (10 s Spielraum für einen verspäteten Tick).
+pub fn earliest_after(last_run: chrono::NaiveDateTime, min_seconds: u32) -> chrono::NaiveDateTime {
+    let min = min_seconds as i64;
+    last_run + chrono::Duration::seconds((min - 10).max(min / 2))
+}
+
+/// Nächster Termin, der den Mindestabstand zu `last_run` einhält.
+pub fn next_allowed(
+    cron: &croner::Cron,
+    timezone: chrono_tz::Tz,
+    now: chrono::NaiveDateTime,
+    last_run: Option<chrono::NaiveDateTime>,
+    min_seconds: u32,
+) -> Option<chrono::NaiveDateTime> {
+    let after = match last_run {
+        Some(last) if too_frequent(cron, timezone, now, min_seconds) => {
+            now.max(earliest_after(last, min_seconds) - chrono::Duration::seconds(1))
+        }
+        _ => now,
+    };
+    next_after(cron, timezone, after)
+}
+
+/// Kurze, sprachneutrale Darstellung eines Abstands ("90 s", "5 min", "2 h", "1 d").
+pub fn format_interval(seconds: u32) -> String {
+    match seconds {
+        s if s >= 86_400 && s.is_multiple_of(86_400) => format!("{} d", s / 86_400),
+        s if s >= 3600 && s.is_multiple_of(3600) => format!("{} h", s / 3600),
+        s if s >= 60 && s.is_multiple_of(60) => format!("{} min", s / 60),
+        s => format!("{s} s"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,6 +177,24 @@ mod tests {
     fn five_field_is_accepted() {
         assert!(parse("30 3 * * *").is_ok());
         assert!(parse("kein cron").is_err());
+    }
+
+    #[test]
+    fn min_interval_delays_the_next_run() {
+        // Jede Minute geplant, Mindestabstand 10 min: nach Lauf um 12:00 erst wieder 12:10.
+        let cron = parse("0 * * * * *").unwrap();
+        let next = next_allowed(&cron, chrono_tz::UTC, at(2026, 11, 24, 12, 0), Some(at(2026, 11, 24, 12, 0)), 600);
+        assert_eq!(next, Some(at(2026, 11, 24, 12, 10)));
+        // Stündlich, Lauf 3 s verspätet: der nächste volle Termin bleibt erlaubt.
+        let cron = parse("0 0 * * * *").unwrap();
+        let late = at(2026, 11, 24, 12, 0) + chrono::Duration::seconds(3);
+        assert_eq!(next_allowed(&cron, chrono_tz::UTC, late, Some(late), 3600), Some(at(2026, 11, 24, 13, 0)));
+        // Jede Minute geplant, 1 h Abstand, Lauf 3 s verspätet: nächster um 13:00.
+        let cron = parse("0 * * * * *").unwrap();
+        assert_eq!(next_allowed(&cron, chrono_tz::UTC, late, Some(late), 3600), Some(at(2026, 11, 24, 13, 0)));
+        assert_eq!(format_interval(90), "90 s");
+        assert_eq!(format_interval(300), "5 min");
+        assert_eq!(format_interval(7200), "2 h");
     }
 }
 

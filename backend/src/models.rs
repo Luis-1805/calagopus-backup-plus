@@ -14,6 +14,8 @@ pub struct Policy {
     pub delete_failed: bool,
     pub last_run: Option<chrono::NaiveDateTime>,
     pub last_error: Option<String>,
+    /// Vom Admin gesetzter Mindestabstand (Sekunden) nur für diesen Server; `None` = global.
+    pub min_interval_seconds: Option<i32>,
 }
 
 impl Policy {
@@ -25,7 +27,31 @@ impl Policy {
             delete_failed: true,
             last_run: None,
             last_error: None,
+            min_interval_seconds: None,
         }
+    }
+
+    /// Setzt den Mindestabstand nur für diesen Server (`None` = globaler Wert).
+    pub async fn set_min_interval(
+        database: &Database,
+        server_uuid: uuid::Uuid,
+        seconds: Option<i32>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            INSERT INTO backups_plus_policies (server_uuid, min_interval_seconds)
+            VALUES ($1, $2)
+            ON CONFLICT (server_uuid) DO UPDATE SET
+                min_interval_seconds = EXCLUDED.min_interval_seconds,
+                updated = NOW() AT TIME ZONE 'UTC'
+            "#,
+        )
+        .bind(server_uuid)
+        .bind(seconds)
+        .execute(database.write())
+        .await?;
+
+        Ok(())
     }
 
     pub async fn by_server_uuid(
@@ -34,7 +60,8 @@ impl Policy {
     ) -> Result<Option<Self>, sqlx::Error> {
         let row = sqlx::query(
             r#"
-            SELECT server_uuid, backup_group_uuid, enabled, delete_failed, last_run, last_error
+            SELECT server_uuid, backup_group_uuid, enabled, delete_failed, last_run, last_error,
+                min_interval_seconds
             FROM backups_plus_policies
             WHERE server_uuid = $1
             "#,
@@ -51,6 +78,7 @@ impl Policy {
                 delete_failed: row.try_get("delete_failed")?,
                 last_run: row.try_get("last_run")?,
                 last_error: row.try_get("last_error")?,
+                min_interval_seconds: row.try_get("min_interval_seconds")?,
             })
         })
         .transpose()

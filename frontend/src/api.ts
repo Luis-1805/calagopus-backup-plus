@@ -34,6 +34,11 @@ export async function applyTemplate(serverUuid: string, templateId: string, enab
   return parseFromApi(overviewSchema, data);
 }
 
+export async function setIntervalOverride(serverUuid: string, seconds: number | null): Promise<Overview> {
+  const { data } = await axiosInstance.put(`${serverBase(serverUuid)}/interval-override`, { seconds });
+  return parseFromApi(overviewSchema, data);
+}
+
 export async function runNow(serverUuid: string, routineUuid: string | null): Promise<void> {
   await axiosInstance.post(`${serverBase(serverUuid)}/run`, { routine_uuid: routineUuid });
 }
@@ -42,7 +47,11 @@ export async function setPinned(serverUuid: string, backupUuid: string, locked: 
   await axiosInstance.post(`${serverBase(serverUuid)}/backups/${backupUuid}/pin`, { locked });
 }
 
-export async function setBackupRoutine(serverUuid: string, backupUuid: string, routineUuid: string | null): Promise<void> {
+export async function setBackupRoutine(
+  serverUuid: string,
+  backupUuid: string,
+  routineUuid: string | null,
+): Promise<void> {
   await axiosInstance.put(`${serverBase(serverUuid)}/backups/${backupUuid}/routine`, { routine_uuid: routineUuid });
 }
 

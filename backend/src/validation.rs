@@ -12,6 +12,8 @@ use std::collections::{HashMap, HashSet};
 pub struct ServerLimits {
     pub backup_limit: i32,
     pub timezone: chrono_tz::Tz,
+    /// Wirksamer Mindestabstand (Sekunden) für diesen Server.
+    pub min_interval_seconds: u32,
 }
 
 pub fn validate(
@@ -59,15 +61,15 @@ pub fn validate(
 
         if routine.source == RoutineSource::Create {
             let timezone = server.map_or(chrono_tz::UTC, |s| s.timezone);
-            let gap = schedule::min_gap(&cron, timezone, chrono::Utc::now().naive_utc())
-                .ok_or_else(|| Msg::new("val.no_future_runs").arg("name", name))?;
-            // 1 Minute Toleranz für Sommerzeit-Umstellungen
-            let min = chrono::Duration::minutes(settings.min_interval_minutes as i64)
-                - chrono::Duration::minutes(1);
-            if gap < min {
+            let min_seconds = server.map_or(settings.min_interval_seconds, |s| s.min_interval_seconds);
+            let now = chrono::Utc::now().naive_utc();
+            if schedule::min_gap(&cron, timezone, now).is_none() {
+                return Err(Msg::new("val.no_future_runs").arg("name", name));
+            }
+            if schedule::too_frequent(&cron, timezone, now, min_seconds) {
                 return Err(Msg::new("val.min_interval")
                     .arg("name", name)
-                    .arg("minutes", settings.min_interval_minutes));
+                    .arg("interval", schedule::format_interval(min_seconds)));
             }
         }
     }
@@ -145,16 +147,24 @@ mod tests {
     }
 
     #[test]
-    fn minimum_interval_in_minutes() {
+    fn minimum_interval_in_seconds() {
         let mut settings = ExtensionSettingsData::default();
 
-        // Standard: 60 Minuten
+        // Standard: 1 Stunde
         assert!(validate(&[routine("0 0 * * * *")], &settings, None).is_ok());
         assert!(validate(&[routine("0 */30 * * * *")], &settings, None).is_err());
 
-        // Admin erlaubt 15 Minuten
-        settings.min_interval_minutes = 15;
-        assert!(validate(&[routine("0 */15 * * * *")], &settings, None).is_ok());
-        assert!(validate(&[routine("0 */5 * * * *")], &settings, None).is_err());
+        // Admin erlaubt 1 Minute
+        settings.min_interval_seconds = 60;
+        assert!(validate(&[routine("0 * * * * *")], &settings, None).is_ok());
+        assert!(validate(&[routine("*/30 * * * * *")], &settings, None).is_err());
+
+        // Server-Wert hat Vorrang vor dem globalen
+        let server = super::ServerLimits {
+            backup_limit: 100,
+            timezone: chrono_tz::UTC,
+            min_interval_seconds: 10,
+        };
+        assert!(validate(&[routine("*/10 * * * * *")], &settings, Some(&server)).is_ok());
     }
 }

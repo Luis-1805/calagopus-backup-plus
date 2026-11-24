@@ -28,6 +28,7 @@ Base path: `/api/client/servers/{server}/backups-plus`
 | `GET` | `/` | `backups-plus.read` | Everything the tab shows: settings, routines, backups with planned action, log, limits, templates, time zone |
 | `PUT` | `/` | `backups-plus.manage` | Save settings and routines |
 | `POST` | `/apply-template` | `backups-plus.manage` | Replace the routines with a template |
+| `PUT` | `/interval-override` | admin `extensions.manage` | Minimum interval for this server: `{ "seconds": 300 }`, `null` = global value |
 | `POST` | `/run` | `backups-plus.manage` | Create a backup now (rate limit: 3/min per server) |
 | `POST` | `/backups/{backup}/pin` | `backups-plus.manage` | Pin or unpin a managed backup |
 | `PUT` | `/backups/{backup}/routine` | `backups-plus.manage` | Assign a managed backup to a routine, or to none |
@@ -125,7 +126,7 @@ Template IDs are listed in `GET /` (`templates[].id`). Built-in IDs: `gfs-kompak
       "uuid": "…", "name": "Hourly", "enabled": true, "position": 0, "cron": "0 0 * * * *",
       "source": "create", "source_routine_uuid": null, "keep_count": 3, "max_age_hours": 0,
       "name_template": "Auto {routine} {date}", "rename_template": null, "ignored_files": [],
-      "next_run": "…", "last_run": "…", "last_error": null, "backup_count": 3
+      "next_run": "…", "last_run": "…", "last_error": null, "backup_count": 3, "throttled": false
     }
   ],
   "backups": [
@@ -138,7 +139,8 @@ Template IDs are listed in `GET /` (`templates[].id`). Built-in IDs: `gfs-kompak
   ],
   "log": [ { "level": "info", "message": "…", "created": "…" } ],
   "limits": {
-    "globally_enabled": true, "min_interval_minutes": 60, "max_keep_total": 50, "max_routines": 10,
+    "globally_enabled": true, "min_interval_seconds": 3600, "global_min_interval_seconds": 3600,
+    "min_interval_override": null, "is_admin": false, "max_keep_total": 50, "max_routines": 10,
     "allow_custom_routines": true, "can_customize": true, "backup_limit": 6, "backups_total": 5
   },
   "templates": [ { "id": "gfs-kompakt", "name": "GFS compact (5 backups)", "builtin": true, "routines": [] } ],
@@ -170,7 +172,7 @@ Base path: `/api/admin/extensions/dev.backupsplus.backups`
 ```json
 {
   "enabled": true,
-  "min_interval_minutes": 60,
+  "min_interval_seconds": 3600,
   "max_keep_total": 50,
   "default_template_id": "gfs-kompakt",
   "default_timezone": "Europe/Berlin",

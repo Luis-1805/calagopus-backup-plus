@@ -30,13 +30,29 @@ pub fn now() -> chrono::NaiveDateTime {
 /// Was einen Lauf ausgelöst hat.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Trigger {
-    /// Minütlicher Hintergrund-Task: fällige Routinen ausführen.
+    /// Hintergrund-Task (alle 5 s): fällige Routinen ausführen.
     Scheduled,
     /// "Jetzt sichern": bestimmte Routine (oder die erste erstellende) sofort ausführen.
     Manual(Option<uuid::Uuid>),
 }
 
-/// Wird jede Minute vom Hintergrund-Task aufgerufen.
+/// (Minute, bereits bearbeitete Server) für die Lastverteilung über mehrere Ticks.
+static MINUTE_BUDGET: std::sync::Mutex<(i64, u32)> = std::sync::Mutex::new((0, 0));
+
+fn take_minute_budget(now: chrono::NaiveDateTime, max: u32) -> bool {
+    let minute = now.and_utc().timestamp() / 60;
+    let mut budget = MINUTE_BUDGET.lock().unwrap_or_else(|e| e.into_inner());
+    if budget.0 != minute {
+        *budget = (minute, 0);
+    }
+    if budget.1 >= max {
+        return false;
+    }
+    budget.1 += 1;
+    true
+}
+
+/// Wird alle 5 Sekunden vom Hintergrund-Task aufgerufen.
 pub async fn tick(state: State) -> Result<(), anyhow::Error> {
     let settings = settings::load(&state).await;
     if !settings.enabled || crate::legacy::old_extension_active(&state).await {
@@ -47,9 +63,9 @@ pub async fn tick(state: State) -> Result<(), anyhow::Error> {
     let due = Policy::servers_due(&state.database, now).await?;
     let mut handled = std::collections::HashSet::new();
 
-    for (index, server_uuid) in due.into_iter().enumerate() {
-        // Lastverteilung: Überzählige im nächsten Tick erledigen.
-        if index as u32 >= settings.max_backups_per_tick {
+    for server_uuid in due {
+        // Lastverteilung: höchstens N Server pro Minute, Überzählige in der nächsten Minute.
+        if !take_minute_budget(now, settings.max_backups_per_tick) {
             break;
         }
         handled.insert(server_uuid);
@@ -62,7 +78,7 @@ pub async fn tick(state: State) -> Result<(), anyhow::Error> {
 
     // Alle 5 Minuten: Rotation für alle aktiven Server (fertig gewordene Backups einsortieren).
     use chrono::Timelike;
-    if now.minute().is_multiple_of(5) {
+    if now.minute().is_multiple_of(5) && now.second() < 5 {
         for server_uuid in Policy::servers_enabled(&state.database).await? {
             if handled.contains(&server_uuid) {
                 continue;
@@ -85,6 +101,8 @@ struct Context {
     timezone: chrono_tz::Tz,
     group_uuid: uuid::Uuid,
     routines: Vec<Routine>,
+    /// Wirksamer Mindestabstand (Sekunden) zwischen zwei neuen Backups einer Routine.
+    min_interval: u32,
 }
 
 async fn load_context(state: &State, server_uuid: uuid::Uuid) -> Result<Context, anyhow::Error> {
@@ -92,8 +110,9 @@ async fn load_context(state: &State, server_uuid: uuid::Uuid) -> Result<Context,
         .await?
         .unwrap_or_else(|| Policy::default_for(server_uuid));
     let server = Server::by_uuid(&state.database, server_uuid).await?;
-    let default_tz = settings::load(state).await.default_timezone;
-    let (timezone, _) = schedule::resolve_timezone(state, &server, &default_tz).await;
+    let settings = settings::load(state).await;
+    let min_interval = settings.min_interval_for(policy.min_interval_seconds);
+    let (timezone, _) = schedule::resolve_timezone(state, &server, &settings.default_timezone).await;
     let group_uuid = ensure_group(state, &mut policy).await?;
     let routines = Routine::all_for_server(&state.database, server_uuid).await?;
 
@@ -103,6 +122,7 @@ async fn load_context(state: &State, server_uuid: uuid::Uuid) -> Result<Context,
         timezone,
         group_uuid,
         routines,
+        min_interval,
     })
 }
 
@@ -150,6 +170,20 @@ pub async fn run_server(
             .into());
     }
 
+    // Mindestabstand gilt sofort auch für bestehende Routinen, deren Zeitplan zu häufig ist.
+    if trigger == Trigger::Scheduled {
+        let routine = &mut ctx.routines[index];
+        if let (Ok(cron), Some(last)) = (schedule::parse(&routine.cron), routine.last_run)
+            && schedule::too_frequent(&cron, ctx.timezone, now, ctx.min_interval)
+            && schedule::earliest_after(last, ctx.min_interval) > now
+        {
+            routine.next_run =
+                schedule::next_allowed(&cron, ctx.timezone, now, Some(last), ctx.min_interval);
+            routine.save_run_state(&state.database).await?;
+            return Ok(None);
+        }
+    }
+
     let outcome = create_backup(state, &mut ctx, index, trigger).await;
 
     // Wartet die Routine auf ein laufendes Backup, bleibt sie fällig und wird im nächsten Tick erneut versucht.
@@ -165,9 +199,9 @@ pub async fn run_server(
     // Beim geplanten Lauf den nächsten Termin setzen – auch bei Fehlern, damit nichts in Schleife läuft.
     if trigger == Trigger::Scheduled {
         let routine = &mut ctx.routines[index];
-        routine.next_run = schedule::parse(&routine.cron)
-            .ok()
-            .and_then(|cron| schedule::next_after(&cron, ctx.timezone, now));
+        routine.next_run = schedule::parse(&routine.cron).ok().and_then(|cron| {
+            schedule::next_allowed(&cron, ctx.timezone, now, Some(now), ctx.min_interval)
+        });
         routine.last_run = Some(now);
         routine.last_error = result.as_ref().err().map(|err| Msg::from_error(err).to_json());
         routine.save_run_state(&state.database).await?;
@@ -183,6 +217,37 @@ pub async fn run_server(
     ctx.policy.save_run_state(&state.database).await?;
 
     result
+}
+
+/// Nach einer Änderung des Mindestabstands: Termine, die jetzt früher erlaubt sind, vorziehen.
+/// (Ein größerer Abstand wird ohnehin bei jedem Lauf geprüft.)
+pub async fn reschedule(state: &State, server_uuid: uuid::Uuid) -> Result<(), anyhow::Error> {
+    let settings = settings::load(state).await;
+    let Some(policy) = Policy::by_server_uuid(&state.database, server_uuid).await? else {
+        return Ok(());
+    };
+    let min_interval = settings.min_interval_for(policy.min_interval_seconds);
+    let server = Server::by_uuid(&state.database, server_uuid).await?;
+    let (timezone, _) = schedule::resolve_timezone(state, &server, &settings.default_timezone).await;
+    let now = now();
+
+    for mut routine in Routine::all_for_server(&state.database, server_uuid).await? {
+        if routine.source != RoutineSource::Create || !routine.enabled {
+            continue;
+        }
+        let Ok(cron) = schedule::parse(&routine.cron) else {
+            continue;
+        };
+        let next = schedule::next_allowed(&cron, timezone, now, routine.last_run, min_interval);
+        if let (Some(next), Some(current)) = (next, routine.next_run)
+            && next < current
+        {
+            routine.next_run = Some(next);
+            routine.save_run_state(&state.database).await?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Stellt sicher, dass es die eigene Backup-Gruppe gibt, und gibt deren UUID zurück.
@@ -321,12 +386,13 @@ pub fn wait_decision(
     now: chrono::NaiveDateTime,
 ) -> (bool, bool) {
     let Some(due_since) = due_since else {
-        // Neue Routine ohne Termin: warten, aber nicht jede Minute protokollieren.
+        // Neue Routine ohne Termin: warten, aber nicht bei jedem Tick protokollieren.
         return (true, false);
     };
 
     let can_wait = following_slot.is_none_or(|following| now < following);
-    let first = now - due_since < chrono::Duration::minutes(1);
+    // Der Tick läuft alle 5 Sekunden.
+    let first = now - due_since < chrono::Duration::seconds(5);
 
     (can_wait, can_wait && first)
 }
@@ -742,6 +808,10 @@ mod tests {
             Some("Auto Hourly x (kept as Monthly)")
         );
         assert_eq!(render_template("   ", "S", "R", "O", created), None);
+        assert_eq!(
+            render_template("{server} – {routine}", "Survival", "Weekly", "", created).as_deref(),
+            Some("Survival – Weekly")
+        );
     }
 
     #[test]

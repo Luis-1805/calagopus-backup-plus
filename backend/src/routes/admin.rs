@@ -11,9 +11,9 @@ mod settings {
     pub struct GeneralSettings {
         #[garde(skip)]
         enabled: bool,
-        #[garde(range(min = 5, max = 10080))]
-        #[schema(minimum = 5, maximum = 10080)]
-        min_interval_minutes: u32,
+        #[garde(range(min = 5, max = 604800))]
+        #[schema(minimum = 5, maximum = 604800)]
+        min_interval_seconds: u32,
         #[garde(range(min = 1, max = 500))]
         #[schema(minimum = 1, maximum = 500)]
         max_keep_total: u32,
@@ -63,7 +63,7 @@ mod settings {
             ApiResponse::new_serialized(Response {
                 settings: super::GeneralSettings {
                     enabled: s.enabled,
-                    min_interval_minutes: s.min_interval_minutes,
+                    min_interval_seconds: s.min_interval_seconds,
                     max_keep_total: s.max_keep_total,
                     max_routines: s.max_routines,
                     allow_custom_routines: s.allow_custom_routines,
@@ -121,6 +121,7 @@ mod settings {
                 .ok();
             }
 
+            let interval_lowered;
             {
                 let mut settings = state.settings.get_mut().await?;
                 let ext: &mut crate::settings::ExtensionSettingsData =
@@ -133,7 +134,8 @@ mod settings {
                 }
 
                 ext.enabled = data.enabled;
-                ext.min_interval_minutes = data.min_interval_minutes;
+                interval_lowered = data.min_interval_seconds < ext.min_interval_seconds;
+                ext.min_interval_seconds = data.min_interval_seconds;
                 ext.max_keep_total = data.max_keep_total;
                 ext.max_routines = data.max_routines;
                 ext.allow_custom_routines = data.allow_custom_routines;
@@ -143,6 +145,15 @@ mod settings {
                 ext.log_retention = data.log_retention;
 
                 settings.save().await?;
+            }
+
+            // Kleinerer Abstand: zurückgehaltene Termine sofort vorziehen.
+            if interval_lowered {
+                for server_uuid in crate::models::Policy::servers_enabled(&state.database).await? {
+                    if let Err(err) = crate::engine::reschedule(&state, server_uuid).await {
+                        tracing::warn!(server = %server_uuid, "backups-plus: reschedule failed: {err:#?}");
+                    }
+                }
             }
 
             activity_logger
@@ -399,6 +410,9 @@ mod apply_template {
                     Ok(routines) => routines,
                     Err(err) => return ApiResponse::error(err.render(lang)).ok(),
                 };
+                let mut policy = Policy::by_server_uuid(&state.database, server.uuid)
+                    .await?
+                    .unwrap_or_else(|| Policy::default_for(server.uuid));
                 if let Err(err) = validation::validate(
                     &routines,
                     &settings,
@@ -407,15 +421,13 @@ mod apply_template {
                         timezone: schedule::resolve_timezone(&state, &server, &settings.default_timezone)
                             .await
                             .0,
+                        min_interval_seconds: settings.min_interval_for(policy.min_interval_seconds),
                     }),
                 ) {
                     skipped.push(format!("{}: {}", server.name, err.render(lang)));
                     continue;
                 }
 
-                let mut policy = Policy::by_server_uuid(&state.database, server.uuid)
-                    .await?
-                    .unwrap_or_else(|| Policy::default_for(server.uuid));
                 if data.enable {
                     policy.enabled = true;
                 }

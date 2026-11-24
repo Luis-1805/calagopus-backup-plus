@@ -34,7 +34,7 @@ The extension card in the extension list shows a one-line version of this.
 | **Allow custom routines** | on | | Off: server users can only apply templates; the routine editor becomes read-only. Users with the admin permission `extensions.manage` can always edit routines. |
 | **Default template** | GFS compact | | Preselected in the template list of servers that aren't set up yet. |
 | **Default time zone** | empty (UTC) | any IANA time zone | Used for servers that have no time zone of their own and whose node doesn't report one. See [Time zones](concepts.md#time-zones). |
-| **Minimum interval between new backups** | 60 min | 5–10,080 min | Smallest allowed gap between two runs of a *create* routine, in minutes. Protects nodes from schedules like "every minute". Values from versions before 2.3 (hours) are converted automatically. |
+| **Minimum interval between new backups** | 1 h | 5 s – 7 d | Smallest allowed gap between two new backups of a *create* routine (number + unit). Applies **immediately to existing routines** too: if a saved schedule runs more often, runs that come too early are skipped and the routine shows an *At most every …* badge. Can be overridden per server (see below). Older stored values (minutes / hours) are converted automatically. |
 | **Max. backups kept per server** | 50 | 1–500 | Upper limit for the sum of *Keep* over all routines of a server. |
 | **Max. routines per server** | 10 | 1–50 | Upper limit for the number of routines per server. |
 | **Max. servers per minute** | 10 | 1–1000 | How many servers may start an automatic backup in the same minute. Further due servers are handled in the following minutes. Prevents dozens of simultaneous backups at the top of the hour. |
@@ -42,6 +42,13 @@ The extension card in the extension list shows a one-line version of this.
 
 Limits apply when routines are saved or templates are applied. Lowering a limit doesn't change existing routines, but
 they can't be saved again until they fit.
+
+### Minimum interval per server
+
+Admins (`extensions.manage`) see an extra switch in the **Setup** card of a server's Auto-Backups tab:
+*Own minimum interval for this server*. Switch it on, choose a value and click **Save interval**; switch it off and save
+to fall back to the global value. The value takes effect immediately — a smaller value lets held-back routines run at
+their next scheduled time, a larger one throttles them right away. Server users only see the effective value.
 
 ## Templates
 
@@ -122,6 +129,7 @@ Backups Plus writes the following events to the panel's activity logs:
 | `server:backups-plus.apply-template` | Server | Template applied on the server page |
 | `server:backups-plus.run` | Server | *Back up now* / *Run now* |
 | `server:backups-plus.pin` | Server | Backup pinned or unpinned |
+| `server:backups-plus.interval-override` | Server | Admin changed the server's minimum interval |
 | `backups-plus:settings.update` | Admin | Global settings saved |
 | `backups-plus:templates.update` | Admin | Custom templates saved |
 | `backups-plus:templates.apply` | Admin | Template applied to servers |

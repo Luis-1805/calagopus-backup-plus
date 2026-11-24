@@ -12,8 +12,9 @@ use utoipa::ToSchema;
 pub struct ExtensionSettingsData {
     /// Hauptschalter: wenn `false`, erstellt und löscht die Extension nichts.
     pub enabled: bool,
-    /// Kleinster erlaubter Abstand (Minuten) zwischen zwei neu erstellten Backups einer Routine.
-    pub min_interval_minutes: u32,
+    /// Kleinster erlaubter Abstand (Sekunden) zwischen zwei neu erstellten Backups einer Routine.
+    /// Gilt sofort auch für bestehende Routinen; pro Server überschreibbar.
+    pub min_interval_seconds: u32,
     /// Maximale Gesamtzahl an Backups, die alle Routinen eines Servers behalten dürfen.
     pub max_keep_total: u32,
     /// Maximale Anzahl Routinen pro Server.
@@ -24,7 +25,7 @@ pub struct ExtensionSettingsData {
     pub default_template_id: String,
     /// Zeitzone für Server ohne eigene Zeitzone, wenn auch der Node keine meldet (leer = UTC).
     pub default_timezone: String,
-    /// Wie viele Server pro Minute höchstens bearbeitet werden (Lastverteilung).
+    /// Wie viele Server pro Tick (alle 5 s) höchstens bearbeitet werden (Lastverteilung).
     pub max_backups_per_tick: u32,
     /// Wie viele Protokolleinträge pro Server aufgehoben werden.
     pub log_retention: u32,
@@ -36,7 +37,7 @@ impl Default for ExtensionSettingsData {
     fn default() -> Self {
         Self {
             enabled: true,
-            min_interval_minutes: 60,
+            min_interval_seconds: 3600,
             max_keep_total: 50,
             max_routines: 10,
             allow_custom_routines: true,
@@ -58,8 +59,8 @@ impl SettingsSerializeExt for ExtensionSettingsData {
         Ok(serializer
             .write_raw_setting("enabled", self.enabled.to_compact_string())
             .write_raw_setting(
-                "min_interval_minutes",
-                self.min_interval_minutes.to_compact_string(),
+                "min_interval_seconds",
+                self.min_interval_seconds.to_compact_string(),
             )
             .write_raw_setting("max_keep_total", self.max_keep_total.to_compact_string())
             .write_raw_setting("max_routines", self.max_routines.to_compact_string())
@@ -81,8 +82,8 @@ impl SettingsSerializeExt for ExtensionSettingsData {
     }
 }
 
-pub const MIN_INTERVAL_MINUTES: u32 = 5;
-pub const MAX_INTERVAL_MINUTES: u32 = 10_080;
+pub const MIN_INTERVAL_SECONDS: u32 = 5;
+pub const MAX_INTERVAL_SECONDS: u32 = 604_800;
 
 pub struct ExtensionSettingsDataDeserializer;
 
@@ -99,18 +100,24 @@ impl SettingsDeserializeExt for ExtensionSettingsDataDeserializer {
                 .take_raw_setting("enabled")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(defaults.enabled),
-            // Ab 2.3 in Minuten; ältere Installationen haben den Wert in Stunden gespeichert.
-            min_interval_minutes: deserializer
-                .take_raw_setting("min_interval_minutes")
+            // Ab 2.4 in Sekunden; ältere Installationen haben Minuten (2.3) bzw. Stunden gespeichert.
+            min_interval_seconds: deserializer
+                .take_raw_setting("min_interval_seconds")
                 .and_then(|s| s.parse::<u32>().ok())
+                .or_else(|| {
+                    deserializer
+                        .take_raw_setting("min_interval_minutes")
+                        .and_then(|s| s.parse::<u32>().ok())
+                        .map(|minutes| minutes.saturating_mul(60))
+                })
                 .or_else(|| {
                     deserializer
                         .take_raw_setting("min_interval_hours")
                         .and_then(|s| s.parse::<u32>().ok())
-                        .map(|hours| hours.saturating_mul(60))
+                        .map(|hours| hours.saturating_mul(3600))
                 })
-                .unwrap_or(defaults.min_interval_minutes)
-                .clamp(MIN_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES),
+                .unwrap_or(defaults.min_interval_seconds)
+                .clamp(MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS),
             max_keep_total: deserializer
                 .take_raw_setting("max_keep_total")
                 .and_then(|s| s.parse().ok())
@@ -175,5 +182,14 @@ impl ExtensionSettingsData {
 
     pub fn find_template(&self, id: &str, lang: crate::i18n::Lang) -> Option<Template> {
         self.all_templates(lang).into_iter().find(|t| t.id == id)
+    }
+}
+
+impl ExtensionSettingsData {
+    /// Mindestabstand für einen Server: eigener Admin-Wert, sonst der globale.
+    pub fn min_interval_for(&self, server_override: Option<i32>) -> u32 {
+        server_override
+            .map(|s| (s.max(0) as u32).clamp(MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS))
+            .unwrap_or(self.min_interval_seconds)
     }
 }

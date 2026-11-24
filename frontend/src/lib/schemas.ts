@@ -46,6 +46,7 @@ export const routineSchema = z.object({
   lastRun: z.coerce.date().nullable(),
   lastError: z.string().nullable(),
   backupCount: z.number(),
+  throttled: z.boolean().optional(),
 });
 export type Routine = z.infer<typeof routineSchema>;
 
@@ -98,7 +99,10 @@ export const overviewSchema = z.object({
   log: z.array(logEntrySchema),
   limits: z.object({
     globallyEnabled: z.boolean(),
-    minIntervalMinutes: z.number(),
+    minIntervalSeconds: z.number(),
+    globalMinIntervalSeconds: z.number(),
+    minIntervalOverride: z.number().nullable(),
+    isAdmin: z.boolean(),
     maxKeepTotal: z.number(),
     maxRoutines: z.number(),
     allowCustomRoutines: z.boolean(),
@@ -139,7 +143,7 @@ export type ConfigUpdate = z.infer<typeof configUpdateSchema>;
 
 export const adminSettingsSchema = z.object({
   enabled: z.boolean(),
-  minIntervalMinutes: z.number().int().min(5).max(10080),
+  minIntervalSeconds: z.number().int().min(5).max(604800),
   maxKeepTotal: z.number().int().min(1).max(500),
   maxRoutines: z.number().int().min(1).max(50),
   allowCustomRoutines: z.boolean(),
@@ -162,6 +166,8 @@ export type AdminOverview = z.infer<typeof adminOverviewSchema>;
 
 /** Common schedules (6 fields: second minute hour day month weekday); labels live in translations.ts. */
 export const cronPresets = [
+  { key: 'everyMinute', value: '0 * * * * *' },
+  { key: 'every5m', value: '0 */5 * * * *' },
   { key: 'every15m', value: '0 */15 * * * *' },
   { key: 'every30m', value: '0 */30 * * * *' },
   { key: 'hourly', value: '0 0 * * * *' },
@@ -176,6 +182,14 @@ export const cronPresets = [
 ] as const;
 
 export const routineColors = ['blue', 'violet', 'orange', 'teal', 'pink', 'cyan', 'lime', 'grape', 'yellow', 'indigo'];
+
+/** Same short form as the backend: "90 s", "5 min", "2 h", "1 d". */
+export function formatInterval(seconds: number): string {
+  if (seconds >= 86400 && seconds % 86400 === 0) return `${seconds / 86400} d`;
+  if (seconds >= 3600 && seconds % 3600 === 0) return `${seconds / 3600} h`;
+  if (seconds >= 60 && seconds % 60 === 0) return `${seconds / 60} min`;
+  return `${seconds} s`;
+}
 
 export function formatBytes(bytes: number): string {
   if (bytes <= 0) return '0 B';

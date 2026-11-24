@@ -197,7 +197,7 @@ migrated automatically into equivalent routines, and existing backups keep their
 
 ## Development
 
-- **Backend:** Rust. A cron task (`backups_plus_tick`) runs every minute on the primary instance and uses the panel's own
+- **Backend:** Rust. A cron task (`backups_plus_tick`) runs every 5 seconds on the primary instance and uses the panel's own
   models (`ServerBackup::create` / `delete`, `ServerBackupGroup`), so it works with every backup storage driver
   (local, S3, restic, Kopia, …).
 - **Frontend:** React + Mantine, mounted as a server route and an admin configuration page.

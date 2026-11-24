@@ -14,6 +14,8 @@ const translations = defineTranslations({
       notAvailable: '–',
     },
     cron: {
+      everyMinute: 'Every minute',
+      every5m: 'Every 5 minutes',
       every15m: 'Every 15 minutes',
       every30m: 'Every 30 minutes',
       hourly: 'Hourly (on the hour)',
@@ -35,6 +37,7 @@ const translations = defineTranslations({
       version: 'Backups Plus · interface v{frontend} · installed v{installed}',
       title: 'Auto-Backups',
       button: {
+        saveOverride: 'Save interval',
         runNow: 'Back up now',
         runRoutine: 'Run now',
         applyTemplate: 'Apply template',
@@ -81,6 +84,9 @@ const translations = defineTranslations({
         customTemplate: '{name} (custom)',
         enabled: 'Automatic backups active',
         deleteFailed: 'Delete failed backups automatically',
+        minInterval: 'Minimum interval between new backups of a routine: {interval}',
+        overrideEnabled: 'Own minimum interval for this server (global: {global})',
+        override: 'Minimum interval for this server',
         confirmTemplate:
           'Apply template "{name}"? The current routines will be replaced. Existing backups are kept but will no longer belong to a routine.',
       },
@@ -89,6 +95,9 @@ const translations = defineTranslations({
         intro:
           'Each routine keeps its newest backups. A routine of type "take over" doesn\'t create backups of its own: when a backup falls out of its source routine and the routine is due, it takes the backup over instead of deleting it – that\'s how weekly and monthly backups come at no extra cost.',
         status: 'Backups: {count}/{keep} · last run: {last} · next: {next}',
+        throttled: 'At most every {interval}',
+        throttledHint:
+          'The schedule runs more often than the minimum interval of {interval} allows. Runs that come too early are skipped.',
       },
       backups: {
         title: 'Managed backups',
@@ -119,6 +128,7 @@ const translations = defineTranslations({
         empty: 'No entries yet.',
       },
       toast: {
+        overrideSaved: 'Minimum interval saved.',
         saved: 'Saved. Automatic backups are active.',
         savedPaused: 'Saved (paused).',
         templateApplied: 'Template "{name}" applied and activated.',
@@ -186,8 +196,9 @@ const translations = defineTranslations({
         defaultTimezone: 'Default time zone',
         defaultTimezoneDescription:
           "Used for servers that have no time zone of their own and whose node doesn't report one. Empty = UTC.",
-        minInterval: 'Minimum interval between new backups (minutes)',
-        minIntervalDescription: '5 minutes to 7 days (10,080). 60 = one backup per hour at most.',
+        minInterval: 'Minimum interval between new backups of a routine',
+        minIntervalDescription:
+          '5 seconds to 7 days. Applies immediately to existing routines too; admins can override it per server.',
         maxKeep: 'Max. backups kept per server',
         maxRoutines: 'Max. routines per server',
         perTick: 'Max. servers per minute',

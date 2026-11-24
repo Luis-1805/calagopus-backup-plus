@@ -25,19 +25,29 @@ import {
 } from '@mantine/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { httpErrorToHuman } from '@/api/axios.ts';
-import { ServerCan } from '@/elements/Can.tsx';
 import Button from '@/elements/buttons/Button.tsx';
+import { ServerCan } from '@/elements/Can.tsx';
 import ServerContentContainer from '@/elements/containers/ServerContentContainer.tsx';
 import TitleCard from '@/elements/data-display/TitleCard.tsx';
 import Switch from '@/elements/input/Switch.tsx';
 import { useToast } from '@/providers/ToastProvider.tsx';
 import { useServerStore } from '@/stores/server.ts';
-import { applyTemplate, getOverview, runNow, setBackupRoutine, setPinned, updateConfig } from './api.ts';
+import {
+  applyTemplate,
+  getOverview,
+  runNow,
+  setBackupRoutine,
+  setIntervalOverride,
+  setPinned,
+  updateConfig,
+} from './api.ts';
+import DurationInput from './components/DurationInput.tsx';
 import RoutineListEditor, { cleanRoutines, routineColor } from './components/RoutineListEditor.tsx';
 import {
   type DeleteReason,
   formatBytes,
   formatDate,
+  formatInterval,
   type ManagedBackup,
   type Overview,
   type PlannedAction,
@@ -78,6 +88,7 @@ export default function ServerPage() {
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState<string | null>(null);
+  const [override, setOverride] = useState<number | null>(null);
 
   const applyOverview = useCallback((data: Overview, resetForm: boolean) => {
     setOverview(data);
@@ -86,6 +97,7 @@ export default function ServerPage() {
       setEnabled(data.policy.enabled);
       setDeleteFailed(data.policy.deleteFailed);
       setTemplateId((current) => current ?? data.defaultTemplateId);
+      setOverride(data.limits.minIntervalOverride);
       setDirty(false);
     }
   }, []);
@@ -125,6 +137,18 @@ export default function ServerPage() {
       case 'over_keep':
         return tExt('reason.overKeep', { routine: reason.routine, keep: reason.keep });
     }
+  };
+
+  const doSaveOverride = () => {
+    setSaving(true);
+    setIntervalOverride(serverUuid, override)
+      .then((data) => {
+        applyOverview(data, !dirty);
+        setOverride(data.limits.minIntervalOverride);
+        addToast(tExt('server.toast.overrideSaved', {}), 'success');
+      })
+      .catch((err) => addToast(httpErrorToHuman(err), 'error'))
+      .finally(() => setSaving(false));
   };
 
   const doSave = () => {
@@ -289,7 +313,9 @@ export default function ServerPage() {
             })}
           </Alert>
         )}
-        {overview.timezoneSource === 'fallback' && <Alert color='blue'>{tExt('server.alert.timezoneFallback', {})}</Alert>}
+        {overview.timezoneSource === 'fallback' && (
+          <Alert color='blue'>{tExt('server.alert.timezoneFallback', {})}</Alert>
+        )}
         {policy.lastError && (
           <Alert color='red' title={tExt('server.alert.lastRunFailed', {})}>
             {policy.lastError}
@@ -408,6 +434,38 @@ export default function ServerPage() {
                 </Alert>
               )}
               {!limits.canCustomize && <Alert color='blue'>{tExt('server.alert.customDisabled', {})}</Alert>}
+
+              <Text size='sm' c='dimmed'>
+                {tExt('server.setup.minInterval', { interval: formatInterval(limits.minIntervalSeconds) })}
+              </Text>
+              {limits.isAdmin && (
+                <Group align='flex-end' wrap='wrap'>
+                  <Switch
+                    label={tExt('server.setup.overrideEnabled', {
+                      global: formatInterval(limits.globalMinIntervalSeconds),
+                    })}
+                    checked={override !== null}
+                    onChange={(e) => setOverride(e.currentTarget.checked ? limits.minIntervalSeconds : null)}
+                  />
+                  {override !== null && (
+                    <DurationInput
+                      label={tExt('server.setup.override', {})}
+                      min={5}
+                      max={604800}
+                      value={override}
+                      onChange={setOverride}
+                    />
+                  )}
+                  <Button
+                    variant='light'
+                    loading={saving}
+                    disabled={override === limits.minIntervalOverride}
+                    onClick={doSaveOverride}
+                  >
+                    {tExt('server.button.saveOverride', {})}
+                  </Button>
+                </Group>
+              )}
             </Stack>
           </TitleCard>
         </ServerCan>
@@ -431,6 +489,19 @@ export default function ServerPage() {
                 if (!saved) return null;
                 return (
                   <Group gap='md'>
+                    {saved.throttled && (
+                      <Tooltip
+                        multiline
+                        w={300}
+                        label={tExt('server.routines.throttledHint', {
+                          interval: formatInterval(limits.minIntervalSeconds),
+                        })}
+                      >
+                        <Badge color='yellow' variant='light'>
+                          {tExt('server.routines.throttled', { interval: formatInterval(limits.minIntervalSeconds) })}
+                        </Badge>
+                      </Tooltip>
+                    )}
                     <Text size='xs' c='dimmed'>
                       {tExt('server.routines.status', {
                         count: saved.backupCount,

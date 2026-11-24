@@ -1,12 +1,20 @@
-import { faChartSimple, faCopy, faGear, faLayerGroup, faPlus, faServer, faTrash } from '@fortawesome/free-solid-svg-icons';
+import {
+  faChartSimple,
+  faCopy,
+  faGear,
+  faLayerGroup,
+  faPlus,
+  faServer,
+  faTrash,
+} from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Accordion, Badge, Group, Select, SimpleGrid, Stack, Text } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
 import { useEffect, useState } from 'react';
 import { httpErrorToHuman } from '@/api/axios.ts';
-import { AdminCan } from '@/elements/Can.tsx';
 import Button from '@/elements/buttons/Button.tsx';
+import { AdminCan } from '@/elements/Can.tsx';
 import TitleCard from '@/elements/data-display/TitleCard.tsx';
 import NumberInput from '@/elements/input/NumberInput.tsx';
 import Switch from '@/elements/input/Switch.tsx';
@@ -21,6 +29,7 @@ import {
   updateAdminSettings,
   updateTemplates,
 } from './api.ts';
+import DurationInput from './components/DurationInput.tsx';
 import RoutineListEditor, { cleanRoutines, emptyRoutine } from './components/RoutineListEditor.tsx';
 import {
   type AdminOverview,
@@ -117,7 +126,7 @@ export default function AdminPage() {
   const form = useForm<AdminSettings>({
     initialValues: {
       enabled: true,
-      minIntervalMinutes: 60,
+      minIntervalSeconds: 3600,
       maxKeepTotal: 50,
       maxRoutines: 10,
       allowCustomRoutines: true,
@@ -275,13 +284,14 @@ export default function AdminPage() {
                 value={form.values.defaultTimezone || null}
                 onChange={(value) => form.setFieldValue('defaultTimezone', value ?? '')}
               />
-              <NumberInput
+              <DurationInput
                 label={tExt('admin.settings.minInterval', {})}
                 description={tExt('admin.settings.minIntervalDescription', {})}
                 min={5}
-                max={10080}
-                step={5}
-                {...form.getInputProps('minIntervalMinutes')}
+                max={604800}
+                value={form.values.minIntervalSeconds}
+                error={form.errors.minIntervalSeconds as string | undefined}
+                onChange={(seconds) => form.setFieldValue('minIntervalSeconds', seconds)}
               />
               <NumberInput
                 label={tExt('admin.settings.maxKeep', {})}

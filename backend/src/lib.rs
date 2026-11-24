@@ -55,11 +55,11 @@ impl Extension for ExtensionStruct {
         _state: State,
         builder: BackgroundTaskBuilder,
     ) -> BackgroundTaskBuilder {
-        // Jede Minute (6-Feld-Cron mit Sekunden, UTC).
+        // Alle 5 Sekunden (6-Feld-Cron mit Sekunden, UTC).
         builder
             .add_cron_task(
                 "backups_plus_tick",
-                croner::Cron::from_str("0 * * * * *").expect("valid cron expression"),
+                croner::Cron::from_str("*/5 * * * * *").expect("valid cron expression"),
                 |state| async move { engine::tick(state).await },
             )
             .await;

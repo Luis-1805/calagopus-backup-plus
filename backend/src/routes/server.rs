@@ -40,10 +40,17 @@ mod types {
         pub last_run: Option<chrono::DateTime<chrono::Utc>>,
         pub last_error: Option<String>,
         pub backup_count: i64,
+        /// Zeitplan häufiger als der Mindestabstand erlaubt – Läufe werden ausgelassen.
+        pub throttled: bool,
     }
 
     impl ApiRoutine {
-        pub fn new(routine: Routine, backup_count: i64, lang: crate::i18n::Lang) -> Self {
+        pub fn new(
+            routine: Routine,
+            backup_count: i64,
+            throttled: bool,
+            lang: crate::i18n::Lang,
+        ) -> Self {
             Self {
                 uuid: routine.uuid,
                 name: routine.name,
@@ -63,6 +70,7 @@ mod types {
                     .last_error
                     .map(|e| crate::i18n::Msg::from_stored(&e).render(lang)),
                 backup_count,
+                throttled,
             }
         }
     }
@@ -83,7 +91,14 @@ mod types {
     #[derive(ToSchema, Serialize)]
     pub struct ApiLimits {
         pub globally_enabled: bool,
-        pub min_interval_minutes: u32,
+        /// Wirksamer Mindestabstand (Sekunden) für diesen Server.
+        pub min_interval_seconds: u32,
+        /// Globaler Mindestabstand (Sekunden).
+        pub global_min_interval_seconds: u32,
+        /// Nur für diesen Server gesetzter Mindestabstand (Sekunden), falls vorhanden.
+        pub min_interval_override: Option<u32>,
+        /// Ob der Nutzer Admin ist (darf den Mindestabstand des Servers ändern).
+        pub is_admin: bool,
         pub max_keep_total: u32,
         pub max_routines: u32,
         pub allow_custom_routines: bool,
@@ -121,7 +136,7 @@ fn can_customize(
 async fn build_overview(
     state: &State,
     server: &shared::models::server::Server,
-    can_customize: bool,
+    permissions: &shared::models::user::PermissionManager,
     lang: crate::i18n::Lang,
 ) -> Result<types::Response, anyhow::Error> {
     use crate::{
@@ -139,6 +154,9 @@ async fn build_overview(
     let exists = stored.is_some();
     let policy = stored.unwrap_or_else(|| Policy::default_for(server.uuid));
     let routines = Routine::all_for_server(&state.database, server.uuid).await?;
+    let min_interval = settings.min_interval_for(policy.min_interval_seconds);
+    let can_customize = can_customize(&settings, permissions);
+    let is_admin = permissions.has_admin_permission("extensions.manage").is_ok();
 
     let managed = match policy.backup_group_uuid {
         Some(group_uuid) => {
@@ -176,7 +194,10 @@ async fn build_overview(
                 .iter()
                 .filter(|b| b.routine_uuid == Some(routine.uuid))
                 .count() as i64;
-            types::ApiRoutine::new(routine, count, lang)
+            let throttled = routine.source == crate::models::RoutineSource::Create
+                && schedule::parse(&routine.cron)
+                    .is_ok_and(|cron| schedule::too_frequent(&cron, timezone, now, min_interval));
+            types::ApiRoutine::new(routine, count, throttled, lang)
         })
         .collect();
 
@@ -198,7 +219,10 @@ async fn build_overview(
         log,
         limits: types::ApiLimits {
             globally_enabled: settings.enabled,
-            min_interval_minutes: settings.min_interval_minutes,
+            min_interval_seconds: min_interval,
+            global_min_interval_seconds: settings.min_interval_seconds,
+            min_interval_override: policy.min_interval_seconds.map(|s| s.max(0) as u32),
+            is_admin,
             max_keep_total: settings.max_keep_total,
             max_routines: settings.max_routines,
             allow_custom_routines: settings.allow_custom_routines,
@@ -240,10 +264,7 @@ mod get {
         permissions.has_server_permission("backups-plus.read")?;
         let lang = crate::i18n::Lang::from_code(&user.language);
 
-        let settings = crate::settings::load(&state).await;
-        let can_customize = super::can_customize(&settings, &permissions);
-
-        ApiResponse::new_serialized(super::build_overview(&state, &server, can_customize, lang).await?).ok()
+        ApiResponse::new_serialized(super::build_overview(&state, &server, &permissions, lang).await?).ok()
     }
 }
 
@@ -431,6 +452,7 @@ mod put {
                 Some(&ServerLimits {
                     backup_limit: server.backup_limit,
                     timezone,
+                    min_interval_seconds: settings.min_interval_for(policy.min_interval_seconds),
                 }),
             ) {
                 return ApiResponse::error(err.render(lang)).ok();
@@ -474,7 +496,7 @@ mod put {
             )
             .await;
 
-        ApiResponse::new_serialized(super::build_overview(&state, &server, can_customize, lang).await?).ok()
+        ApiResponse::new_serialized(super::build_overview(&state, &server, &permissions, lang).await?).ok()
     }
 }
 
@@ -529,7 +551,6 @@ mod apply_template {
             let lang = crate::i18n::Lang::from_code(&user.language);
 
             let settings = crate::settings::load(&state).await;
-            let can_customize = super::super::can_customize(&settings, &permissions);
             let Some(template) = settings.find_template(&data.template_id, lang) else {
                 return ApiResponse::error(crate::i18n::t("err.template_not_found", lang)).ok();
             };
@@ -538,6 +559,9 @@ mod apply_template {
                 Ok(routines) => routines,
                 Err(err) => return ApiResponse::error(err.render(lang)).ok(),
             };
+            let mut policy = Policy::by_server_uuid(&state.database, server.uuid)
+                .await?
+                .unwrap_or_else(|| Policy::default_for(server.uuid));
             if let Err(err) = validation::validate(
                 &routines,
                 &settings,
@@ -546,6 +570,7 @@ mod apply_template {
                     timezone: schedule::resolve_timezone(&state, &server, &settings.default_timezone)
                         .await
                         .0,
+                    min_interval_seconds: settings.min_interval_for(policy.min_interval_seconds),
                 }),
             ) {
                 return ApiResponse::error(
@@ -555,9 +580,6 @@ mod apply_template {
                 ).ok();
             }
 
-            let mut policy = Policy::by_server_uuid(&state.database, server.uuid)
-                .await?
-                .unwrap_or_else(|| Policy::default_for(server.uuid));
             policy.enabled = data.enabled;
             policy.last_error = None;
             policy.upsert(&state.database).await?;
@@ -578,7 +600,7 @@ mod apply_template {
                 .await;
 
             ApiResponse::new_serialized(
-                super::super::build_overview(&state, &server, can_customize, lang).await?,
+                super::super::build_overview(&state, &server, &permissions, lang).await?,
             )
             .ok()
         }
@@ -896,9 +918,81 @@ mod backup {
     }
 }
 
+/// Admin: Mindestabstand nur für diesen Server.
+mod interval_override {
+    use super::State;
+    use utoipa_axum::{router::OpenApiRouter, routes};
+
+    mod put {
+        use crate::{
+            models::Policy,
+            settings::{MAX_INTERVAL_SECONDS, MIN_INTERVAL_SECONDS},
+        };
+        use serde::Deserialize;
+        use shared::{
+            ApiError, GetState,
+            models::{
+                server::{GetServer, GetServerActivityLogger},
+                user::GetPermissionManager,
+            },
+            response::{ApiResponse, ApiResponseResult},
+        };
+        use utoipa::ToSchema;
+
+        #[derive(ToSchema, Deserialize)]
+        pub struct Payload {
+            /// Sekunden; `null` = globalen Wert verwenden.
+            seconds: Option<u32>,
+        }
+
+        #[utoipa::path(put, path = "/", responses(
+            (status = OK, body = inline(super::super::types::Response)),
+            (status = UNAUTHORIZED, body = ApiError),
+        ), params(
+            ("server" = uuid::Uuid, description = "The server ID"),
+        ), request_body = inline(Payload))]
+        pub async fn route(
+            state: GetState,
+            permissions: GetPermissionManager,
+            server: GetServer,
+            user: shared::models::user::GetUser,
+            activity_logger: GetServerActivityLogger,
+            shared::Payload(data): shared::Payload<Payload>,
+        ) -> ApiResponseResult {
+            permissions.has_admin_permission("extensions.manage")?;
+            let lang = crate::i18n::Lang::from_code(&user.language);
+
+            let seconds = data
+                .seconds
+                .map(|s| s.clamp(MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS) as i32);
+            Policy::set_min_interval(&state.database, server.uuid, seconds).await?;
+            crate::engine::reschedule(&state, server.uuid).await?;
+
+            activity_logger
+                .log(
+                    "server:backups-plus.interval-override",
+                    serde_json::json!({ "seconds": seconds }),
+                )
+                .await;
+
+            ApiResponse::new_serialized(
+                super::super::build_overview(&state, &server, &permissions, lang).await?,
+            )
+            .ok()
+        }
+    }
+
+    pub fn router(state: &State) -> OpenApiRouter<State> {
+        OpenApiRouter::new()
+            .routes(routes!(put::route))
+            .with_state(state.clone())
+    }
+}
+
 pub fn router(state: &State) -> OpenApiRouter<State> {
     OpenApiRouter::new()
         .routes(routes!(get::route))
+        .nest("/interval-override", interval_override::router(state))
         .routes(routes!(put::route))
         .nest("/apply-template", apply_template::router(state))
         .nest("/run", run::router(state))
