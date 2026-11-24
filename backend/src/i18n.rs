@@ -134,6 +134,8 @@ fn template(key: &str, lang: Lang) -> Option<&'static str> {
         ("log.skipped_installing", De) => "\"{routine}\" übersprungen: Server wird gerade installiert oder wiederhergestellt",
         ("log.skipped_transferring", En) => "\"{routine}\" skipped: the server is being transferred",
         ("log.skipped_transferring", De) => "\"{routine}\" übersprungen: Server wird gerade übertragen",
+        ("log.waiting", En) => "\"{routine}\" waits for the running backup to finish",
+        ("log.waiting", De) => "\"{routine}\" wartet, bis das laufende Backup fertig ist",
         ("log.skipped_running", En) => "\"{routine}\" skipped: a previous automatic backup is still running",
         ("log.skipped_running", De) => "\"{routine}\" übersprungen: ein vorheriges automatisches Backup läuft noch",
         ("log.backup_started", En) => "Started \"{name}\" for routine \"{routine}\"",

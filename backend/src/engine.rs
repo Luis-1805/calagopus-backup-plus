@@ -149,7 +149,17 @@ pub async fn run_server(
             .into());
     }
 
-    let result = create_backup(state, &mut ctx, index).await;
+    let outcome = create_backup(state, &mut ctx, index, trigger).await;
+
+    // Wartet die Routine auf ein laufendes Backup, bleibt sie fällig und wird im nächsten Tick erneut versucht.
+    if matches!(outcome, Ok(Outcome::Waiting)) {
+        return Ok(None);
+    }
+
+    let result = outcome.map(|outcome| match outcome {
+        Outcome::Created(uuid) => Some(uuid),
+        Outcome::Skipped | Outcome::Waiting => None,
+    });
 
     // Beim geplanten Lauf den nächsten Termin setzen – auch bei Fehlern, damit nichts in Schleife läuft.
     if trigger == Trigger::Scheduled {
@@ -234,11 +244,43 @@ fn render_name(
     name.into()
 }
 
+/// Ergebnis eines Erstellversuchs.
+#[derive(Debug, PartialEq, Eq)]
+enum Outcome {
+    /// Backup wurde gestartet.
+    Created(uuid::Uuid),
+    /// Termin wurde übersprungen (steht im Protokoll).
+    Skipped,
+    /// Ein anderes automatisches Backup läuft noch; die Routine bleibt fällig und versucht es gleich erneut.
+    Waiting,
+}
+
+/// Darf eine fällige Routine auf ein laufendes Backup warten – und ist es der erste Warte-Tick?
+///
+/// Gewartet wird, bis der *nächste* Termin derselben Routine erreicht ist. Dann ist der aktuelle
+/// Termin hinfällig und wird übersprungen, damit sich nichts aufstaut.
+pub fn wait_decision(
+    due_since: Option<chrono::NaiveDateTime>,
+    following_slot: Option<chrono::NaiveDateTime>,
+    now: chrono::NaiveDateTime,
+) -> (bool, bool) {
+    let Some(due_since) = due_since else {
+        // Neue Routine ohne Termin: warten, aber nicht jede Minute protokollieren.
+        return (true, false);
+    };
+
+    let can_wait = following_slot.is_none_or(|following| now < following);
+    let first = now - due_since < chrono::Duration::minutes(1);
+
+    (can_wait, can_wait && first)
+}
+
 async fn create_backup(
     state: &State,
     ctx: &mut Context,
     index: usize,
-) -> Result<Option<uuid::Uuid>, anyhow::Error> {
+    trigger: Trigger,
+) -> Result<Outcome, anyhow::Error> {
     let server_uuid = ctx.server.uuid;
     let routine_name = ctx.routines[index].name.clone();
     let reason = if ctx.server.suspended {
@@ -263,6 +305,31 @@ async fn create_backup(
         None
     };
 
+    // Geplante Läufe warten auf ein noch laufendes Backup, statt ihren Termin zu verlieren.
+    if reason == Some("log.skipped_running") && trigger == Trigger::Scheduled {
+        let routine = &ctx.routines[index];
+        let now = now();
+        let following = routine.next_run.and_then(|due| {
+            schedule::parse(&routine.cron)
+                .ok()
+                .and_then(|cron| schedule::next_after(&cron, ctx.timezone, due))
+        });
+        let (can_wait, first) = wait_decision(routine.next_run, following, now);
+
+        if can_wait {
+            if first {
+                models::write_log(
+                    &state.database,
+                    server_uuid,
+                    "info",
+                    Msg::new("log.waiting").arg("routine", &routine_name),
+                )
+                .await;
+            }
+            return Ok(Outcome::Waiting);
+        }
+    }
+
     if let Some(reason) = reason {
         models::write_log(
             &state.database,
@@ -271,7 +338,7 @@ async fn create_backup(
             Msg::new(reason).arg("routine", &routine_name),
         )
         .await;
-        return Ok(None);
+        return Ok(Outcome::Skipped);
     }
 
     // Gleiche Sperre wie die Panel-eigene Backup-Erstellung, um Wettläufe zu vermeiden.
@@ -352,7 +419,7 @@ async fn create_backup(
     )
     .await;
 
-    Ok(Some(backup.uuid))
+    Ok(Outcome::Created(backup.uuid))
 }
 
 /// Baut die Planungs-Eingaben aus Routinen und Backups.
@@ -547,5 +614,31 @@ async fn log_activity(state: &State, server_uuid: uuid::Uuid, event: &str, data:
     .await
     {
         tracing::warn!(server = %server_uuid, "backup-plus: failed to log activity: {err:#?}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wait_decision;
+
+    fn at(h: u32, m: u32) -> chrono::NaiveDateTime {
+        chrono::NaiveDate::from_ymd_opt(2026, 11, 24)
+            .unwrap()
+            .and_hms_opt(h, m, 0)
+            .unwrap()
+    }
+
+    #[test]
+    fn waits_until_the_next_slot_and_logs_once() {
+        // Fällig seit 04:00, nächster Termin derselben Routine 05:00.
+        assert_eq!(wait_decision(Some(at(4, 0)), Some(at(5, 0)), at(4, 0)), (true, true));
+        assert_eq!(wait_decision(Some(at(4, 0)), Some(at(5, 0)), at(4, 30)), (true, false));
+        // Der nächste Termin ist erreicht: dieser wird übersprungen.
+        assert_eq!(wait_decision(Some(at(4, 0)), Some(at(5, 0)), at(5, 0)), (false, false));
+    }
+
+    #[test]
+    fn new_routines_wait_silently() {
+        assert_eq!(wait_decision(None, None, at(4, 0)), (true, false));
     }
 }

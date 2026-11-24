@@ -49,7 +49,7 @@ again at its next scheduled time.
 | *skipped: the server is suspended* | Suspended servers aren't backed up |
 | *skipped: the server is being installed or restored* | The server's files are changing right now |
 | *skipped: the server is being transferred* | The server is moving to another node |
-| *skipped: a previous automatic backup is still running* | Only one automatic backup per server runs at a time. If backups take longer than your schedule interval, choose a longer interval. |
+| *skipped: a previous automatic backup is still running* | Only one automatic backup per server runs at a time. A due routine first **waits** for the running backup (log: *"…" waits for the running backup to finish*) and starts as soon as it's done. It is only skipped if the running backup is still not finished when the routine's next scheduled time arrives — then your backups take longer than the schedule interval; choose a longer interval. |
 
 A backup that has been running for more than **6 hours** is treated as stuck and no longer blocks new backups.
 

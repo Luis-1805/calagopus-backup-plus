@@ -139,6 +139,7 @@ The last 50 entries for this server, newest first. Each entry has a level (*info
 | *Started "…" for routine "Hourly"* | A backup was started |
 | *"…" moved from "Hourly" to "Weekly"* | A take-over routine adopted a backup |
 | *"…" deleted (older than the 3 newest backups of routine "Hourly")* | Rotation removed a backup |
+| *"Daily" waits for the running backup to finish* | Another automatic backup is still running; this routine starts right after it |
 | *"Hourly" skipped: …* | A scheduled backup was skipped — see [Troubleshooting](troubleshooting.md#backup-was-skipped) |
 | *"…" could not be deleted: …* | The panel couldn't delete a backup; it is retried on the next rotation |
 | *Template "…" applied* | Someone applied a template |

@@ -171,14 +171,14 @@ Empty lines are ignored. Up to 100 rules, each up to 255 characters.
 
 Use the ▲/▼ buttons to reorder routines. The order matters in two places:
 
-1. When several **create** routines are due at the same moment, the first one in the list runs. Only one automatic
-   backup per server runs at a time, so a second create routine that comes due while that backup is still running is
-   **skipped for this slot** (the log says so) and runs at its next scheduled time.
+1. When several **create** routines are due at the same moment, the first one in the list runs first. Only one
+   automatic backup per server runs at a time, so the others **wait** until it has finished and then run one after
+   another (the log shows *"…" waits for the running backup to finish*). A waiting routine keeps its slot until the
+   routine's *next* scheduled time; only if the running backup takes even longer is that slot skipped.
 
    > [!TIP]
-   > Give create routines schedules that don't overlap, e.g. hourly at minute `0` and the nightly backup at minute
-   > `30`: `0 30 4 * * *`. Usually you don't need two create routines at all — a single create routine plus
-   > take-over routines covers most strategies.
+   > Usually you don't need two create routines at all — a single create routine plus take-over routines covers most
+   > strategies, and creates fewer backups.
 2. When several **take-over** routines with the same source are due, the first one gets the first backup that falls
    out.
 

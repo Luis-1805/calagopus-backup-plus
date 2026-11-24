@@ -37,8 +37,10 @@ Errors in one server never stop the others; they are written to that server's lo
 1. Load the server, its settings and routines. Create the *Backup Plus (auto)* group if it's missing.
 2. **Rotate** (see below).
 3. Pick the first due, active *create* routine.
-4. **Safety checks** — skip (and log) if the server is suspended, installing, restoring or transferring, or if an
-   automatic backup of this server started within the last 6 hours is still running.
+4. **Safety checks** — skip (and log) if the server is suspended, installing, restoring or transferring. If an
+   automatic backup of this server (started within the last 6 hours) is still running, the routine **waits**: it stays
+   due and is tried again in the next tick, until the routine's following scheduled time — only then is the slot
+   skipped. The first waiting tick writes a log entry.
 5. Take the panel's per-server backup lock (the same one the panel uses for manual backups).
 6. **Backup limit** — if the server is at its limit, rotate again while reserving one slot of this routine; if it's
    still full, fail with *backup limit reached*.
@@ -46,7 +48,7 @@ Errors in one server never stop the others; they are written to that server's lo
    panel then asks Wings to create it.
 8. Assign the backup to the routine, write the activity log entry and the log line.
 9. Set the routine's next run from its schedule — also if the run failed or was skipped, so a broken server never retries
-   every minute.
+   every minute. (A *waiting* routine is the exception: it keeps its due time, see step 4.)
 
 Manual runs (**Back up now**, **Run now**) do steps 1–8 but leave the schedule untouched.
 
