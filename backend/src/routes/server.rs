@@ -83,7 +83,7 @@ mod types {
     #[derive(ToSchema, Serialize)]
     pub struct ApiLimits {
         pub globally_enabled: bool,
-        pub min_interval_hours: u32,
+        pub min_interval_minutes: u32,
         pub max_keep_total: u32,
         pub max_routines: u32,
         pub allow_custom_routines: bool,
@@ -104,6 +104,8 @@ mod types {
         pub default_template_id: String,
         pub timezone: String,
         pub timezone_source: crate::schedule::TimezoneSource,
+        /// Installierte Version (zum Erkennen veralteter Oberflächen im Browser).
+        pub extension_version: String,
     }
 }
 
@@ -196,7 +198,7 @@ async fn build_overview(
         log,
         limits: types::ApiLimits {
             globally_enabled: settings.enabled,
-            min_interval_hours: settings.min_interval_hours,
+            min_interval_minutes: settings.min_interval_minutes,
             max_keep_total: settings.max_keep_total,
             max_routines: settings.max_routines,
             allow_custom_routines: settings.allow_custom_routines,
@@ -208,6 +210,7 @@ async fn build_overview(
         default_template_id: settings.default_template_id.clone(),
         timezone: timezone.name().to_string(),
         timezone_source,
+        extension_version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }
 

@@ -26,6 +26,8 @@
       "notAvailable": "–"
     },
     "cron": {
+      "every15m": "Alle 15 Minuten",
+      "every30m": "Alle 30 Minuten",
       "hourly": "Stündlich (zur vollen Stunde)",
       "every2h": "Alle 2 Stunden",
       "every6h": "Alle 6 Stunden",
@@ -42,6 +44,7 @@
       "overKeep": "älter als die {keep} neuesten Backups der Routine \"{routine}\""
     },
     "server": {
+      "version": "Backup Plus · Oberfläche v{frontend} · installiert v{installed}",
       "title": "Auto-Backups",
       "button": {
         "runNow": "Jetzt sichern",
@@ -57,7 +60,9 @@
         "routineError": "Routine „{name}“",
         "limitTooLow": "Das Backup-Limit dieses Servers ({limit}) ist kleiner als die Summe der behaltenen Backups ({total}). Bitte einen Administrator, das Limit zu erhöhen (empfohlen: {recommended}).",
         "customDisabled": "Eigene Routinen sind vom Administrator deaktiviert – du kannst eine der Vorlagen anwenden.",
-        "timezoneFallback": "Für diesen Server ist keine Zeitzone eingestellt, deshalb laufen die Zeitpläne in UTC. Stelle die Zeitzone unter Einstellungen → Zeitzone ein, damit sie in deiner Ortszeit laufen."
+        "timezoneFallback": "Für diesen Server ist keine Zeitzone eingestellt, deshalb laufen die Zeitpläne in UTC. Stelle die Zeitzone unter Einstellungen → Zeitzone ein, damit sie in deiner Ortszeit laufen.",
+        "versionMismatchTitle": "Veraltete Oberfläche",
+        "versionMismatch": "Dein Browser zeigt die Oberfläche von Version {frontend}, installiert ist aber Version {installed}. Lade die Seite mit Strg + Umschalt + R neu. Bleibt der Hinweis, liefert ein Proxy oder CDN vor dem Panel (z. B. Cloudflare) noch alte Dateien aus – leere dort den Cache."
       },
       "card": {
         "status": "Status",
@@ -142,9 +147,8 @@
       "source": "Quelle",
       "sourceDescription": "Fällt ein Backup aus dieser Routine heraus und diese Routine ist laut Zeitplan dran, wird es übernommen statt gelöscht.",
       "sourcePlaceholder": "Routine wählen",
-      "rename": "Übernommene Backups umbenennen",
-      "renameDescription": "Gibt einem Backup einen neuen Namen, wenn diese Routine es übernimmt.",
-      "renameTemplate": "Neuer Name",
+      "renameDescription": "Optional: neuer Name für Backups, die diese Routine übernimmt. Leer = Name bleibt.",
+      "renameTemplate": "Namensvorlage für übernommene Backups",
       "scheduleCreate": "Zeitplan (wann gesichert wird)",
       "schedulePromote": "Zeitplan (wann übernommen wird)",
       "scheduleDescription": "Cron mit Sekunden, Zeitzone {timezone}",
@@ -162,7 +166,8 @@
       "total": "Insgesamt {backups}",
       "defaultName": "Routine {number}",
       "defaultFirst": "Stündlich",
-      "defaultSecond": "Wöchentlich"
+      "defaultSecond": "Wöchentlich",
+      "renamePlaceholderSuffix": "leer lässt den Namen"
     },
     "admin": {
       "overview": {
@@ -185,7 +190,8 @@
         "defaultTemplateDescription": "Wird Servern ohne Einrichtung vorgeschlagen.",
         "defaultTimezone": "Standard-Zeitzone",
         "defaultTimezoneDescription": "Für Server ohne eigene Zeitzone, deren Node auch keine meldet. Leer = UTC.",
-        "minInterval": "Kleinster Abstand neuer Backups (Stunden)",
+        "minInterval": "Kleinster Abstand neuer Backups (Minuten)",
+        "minIntervalDescription": "5 Minuten bis 7 Tage (10.080). 60 = höchstens ein Backup pro Stunde.",
         "maxKeep": "Max. behaltene Backups pro Server",
         "maxRoutines": "Max. Routinen pro Server",
         "perTick": "Max. Server pro Minute",

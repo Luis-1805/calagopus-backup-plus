@@ -2,6 +2,7 @@
 
 [← Guide overview](README.md)
 
+- [A new feature doesn't show up after an update](#a-new-feature-doesnt-show-up-after-an-update)
 - [No backups are being created](#no-backups-are-being-created)
 - [Backup limit reached](#backup-limit-reached)
 - [Backup was skipped](#backup-was-skipped)
@@ -9,6 +10,17 @@
 - [A backup could not be deleted](#a-backup-could-not-be-deleted)
 - [Error messages when saving](#error-messages-when-saving)
 - [FAQ](#faq)
+
+## A new feature doesn't show up after an update
+
+At the bottom of the Auto-Backups tab you see two versions: the **interface** your browser is running and the
+**installed** version. If they differ, an orange *Outdated interface* alert appears at the top.
+
+1. Reload the page with **Ctrl + Shift + R** (or open it in a private window).
+2. If the alert stays, something between you and the panel still serves old files — typically a proxy or CDN such as
+   Cloudflare. Purge its cache.
+3. If both versions show the old number, the update itself didn't go through: check the build log under
+   **Admin → Extensions**.
 
 ## No backups are being created
 

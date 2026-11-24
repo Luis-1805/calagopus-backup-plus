@@ -14,6 +14,8 @@ const translations = defineTranslations({
       notAvailable: '–',
     },
     cron: {
+      every15m: 'Every 15 minutes',
+      every30m: 'Every 30 minutes',
       hourly: 'Hourly (on the hour)',
       every2h: 'Every 2 hours',
       every6h: 'Every 6 hours',
@@ -30,6 +32,7 @@ const translations = defineTranslations({
       overKeep: 'older than the {keep} newest backups of routine "{routine}"',
     },
     server: {
+      version: 'Backup Plus · interface v{frontend} · installed v{installed}',
       title: 'Auto-Backups',
       button: {
         runNow: 'Back up now',
@@ -47,6 +50,9 @@ const translations = defineTranslations({
         limitTooLow:
           "This server's backup limit ({limit}) is lower than the total number of backups to keep ({total}). Ask an administrator to raise the limit (recommended: {recommended}).",
         customDisabled: 'Custom routines have been disabled by an administrator – you can apply one of the templates.',
+        versionMismatchTitle: 'Outdated interface',
+        versionMismatch:
+          'Your browser is showing the interface of version {frontend}, but version {installed} is installed. Reload the page with Ctrl + Shift + R. If this message stays, a proxy or CDN in front of the panel (e.g. Cloudflare) is still serving old files – purge its cache.',
         timezoneFallback:
           'No time zone is configured for this server, so schedules run in UTC. Set the time zone under Settings → Time zone to run them in your local time.',
       },
@@ -136,9 +142,9 @@ const translations = defineTranslations({
       sourceDescription:
         'When a backup falls out of this routine and the routine is due according to its schedule, it is taken over instead of deleted.',
       sourcePlaceholder: 'Choose a routine',
-      rename: 'Rename taken-over backups',
-      renameDescription: 'Gives a backup a new name when this routine takes it over.',
-      renameTemplate: 'New name',
+      renameDescription: 'Optional: new name for backups this routine takes over. Empty = keep the name.',
+      renameTemplate: 'Name template for taken-over backups',
+      renamePlaceholderSuffix: 'empty keeps the name',
       scheduleCreate: 'Schedule (when to back up)',
       schedulePromote: 'Schedule (when to take over)',
       scheduleDescription: 'Cron with seconds, time zone {timezone}',
@@ -180,7 +186,8 @@ const translations = defineTranslations({
         defaultTimezone: 'Default time zone',
         defaultTimezoneDescription:
           "Used for servers that have no time zone of their own and whose node doesn't report one. Empty = UTC.",
-        minInterval: 'Minimum interval between new backups (hours)',
+        minInterval: 'Minimum interval between new backups (minutes)',
+        minIntervalDescription: '5 minutes to 7 days (10,080). 60 = one backup per hour at most.',
         maxKeep: 'Max. backups kept per server',
         maxRoutines: 'Max. routines per server',
         perTick: 'Max. servers per minute',

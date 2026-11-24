@@ -171,38 +171,15 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
               </SimpleGrid>
 
               {routine.source === 'promote' && (
-                <>
-                  <Select
-                    label={tExt('editor.source', {})}
-                    description={tExt('editor.sourceDescription', {})}
-                    disabled={readOnly}
-                    value={routine.sourceKey}
-                    data={sourceOptions}
-                    placeholder={tExt('editor.sourcePlaceholder', {})}
-                    onChange={(value) => update(index, { sourceKey: value })}
-                  />
-                  <SimpleGrid cols={{ base: 1, sm: 2 }}>
-                    <Switch
-                      label={tExt('editor.rename', {})}
-                      description={tExt('editor.renameDescription', {})}
-                      disabled={readOnly}
-                      checked={routine.renameTemplate !== null}
-                      onChange={(e) =>
-                        update(index, { renameTemplate: e.currentTarget.checked ? '{routine} {date}' : null })
-                      }
-                    />
-                    {routine.renameTemplate !== null && (
-                      <TextInput
-                        label={tExt('editor.renameTemplate', {})}
-                        description='{routine}, {date}, {day}, {time}, {server}, {original}'
-                        disabled={readOnly}
-                        value={routine.renameTemplate}
-                        maxLength={200}
-                        onChange={(e) => update(index, { renameTemplate: e.currentTarget.value })}
-                      />
-                    )}
-                  </SimpleGrid>
-                </>
+                <Select
+                  label={tExt('editor.source', {})}
+                  description={tExt('editor.sourceDescription', {})}
+                  disabled={readOnly}
+                  value={routine.sourceKey}
+                  data={sourceOptions}
+                  placeholder={tExt('editor.sourcePlaceholder', {})}
+                  onChange={(value) => update(index, { sourceKey: value })}
+                />
               )}
 
               <SimpleGrid cols={{ base: 1, sm: 2 }}>
@@ -273,6 +250,18 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
                     onChange={(e) => update(index, { ignoredFiles: e.currentTarget.value.split('\n') })}
                   />
                 </SimpleGrid>
+              )}
+
+              {routine.source === 'promote' && (
+                <TextInput
+                  label={tExt('editor.renameTemplate', {})}
+                  description={`${tExt('editor.renameDescription', {})} {routine}, {date}, {day}, {time}, {server}, {original}`}
+                  placeholder={`{routine} {date} – ${tExt('editor.renamePlaceholderSuffix', {})}`}
+                  disabled={readOnly}
+                  value={routine.renameTemplate ?? ''}
+                  maxLength={200}
+                  onChange={(e) => update(index, { renameTemplate: e.currentTarget.value || null })}
+                />
               )}
             </Stack>
           </Card>

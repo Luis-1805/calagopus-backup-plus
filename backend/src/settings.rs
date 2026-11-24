@@ -12,8 +12,8 @@ use utoipa::ToSchema;
 pub struct ExtensionSettingsData {
     /// Hauptschalter: wenn `false`, erstellt und löscht die Extension nichts.
     pub enabled: bool,
-    /// Kleinster erlaubter Abstand (Stunden) zwischen zwei neu erstellten Backups einer Routine.
-    pub min_interval_hours: u32,
+    /// Kleinster erlaubter Abstand (Minuten) zwischen zwei neu erstellten Backups einer Routine.
+    pub min_interval_minutes: u32,
     /// Maximale Gesamtzahl an Backups, die alle Routinen eines Servers behalten dürfen.
     pub max_keep_total: u32,
     /// Maximale Anzahl Routinen pro Server.
@@ -36,7 +36,7 @@ impl Default for ExtensionSettingsData {
     fn default() -> Self {
         Self {
             enabled: true,
-            min_interval_hours: 1,
+            min_interval_minutes: 60,
             max_keep_total: 50,
             max_routines: 10,
             allow_custom_routines: true,
@@ -58,8 +58,8 @@ impl SettingsSerializeExt for ExtensionSettingsData {
         Ok(serializer
             .write_raw_setting("enabled", self.enabled.to_compact_string())
             .write_raw_setting(
-                "min_interval_hours",
-                self.min_interval_hours.to_compact_string(),
+                "min_interval_minutes",
+                self.min_interval_minutes.to_compact_string(),
             )
             .write_raw_setting("max_keep_total", self.max_keep_total.to_compact_string())
             .write_raw_setting("max_routines", self.max_routines.to_compact_string())
@@ -81,6 +81,9 @@ impl SettingsSerializeExt for ExtensionSettingsData {
     }
 }
 
+pub const MIN_INTERVAL_MINUTES: u32 = 5;
+pub const MAX_INTERVAL_MINUTES: u32 = 10_080;
+
 pub struct ExtensionSettingsDataDeserializer;
 
 #[async_trait::async_trait]
@@ -96,11 +99,18 @@ impl SettingsDeserializeExt for ExtensionSettingsDataDeserializer {
                 .take_raw_setting("enabled")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(defaults.enabled),
-            min_interval_hours: deserializer
-                .take_raw_setting("min_interval_hours")
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(defaults.min_interval_hours)
-                .max(1),
+            // Ab 2.3 in Minuten; ältere Installationen haben den Wert in Stunden gespeichert.
+            min_interval_minutes: deserializer
+                .take_raw_setting("min_interval_minutes")
+                .and_then(|s| s.parse::<u32>().ok())
+                .or_else(|| {
+                    deserializer
+                        .take_raw_setting("min_interval_hours")
+                        .and_then(|s| s.parse::<u32>().ok())
+                        .map(|hours| hours.saturating_mul(60))
+                })
+                .unwrap_or(defaults.min_interval_minutes)
+                .clamp(MIN_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES),
             max_keep_total: deserializer
                 .take_raw_setting("max_keep_total")
                 .and_then(|s| s.parse().ok())

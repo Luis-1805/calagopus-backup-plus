@@ -74,6 +74,7 @@ Classic five-field expressions (without seconds) are accepted as well.
 
 | Meaning | Expression |
 | --- | --- |
+| Every 15 minutes (only if the admin allows it) | `0 */15 * * * *` |
 | Every hour, on the hour | `0 0 * * * *` |
 | Every hour at minute 15 | `0 15 * * * *` |
 | Every 2 / 6 / 12 hours | `0 0 */2 * * *` · `0 0 */6 * * *` · `0 0 */12 * * *` |
@@ -100,8 +101,9 @@ The editor helps you:
 **Time zone:** the server's time zone (fallback UTC). See [Time zones](concepts.md#time-zones).
 
 **Minimum interval:** for *create* routines, two consecutive runs must be at least the admin's *minimum interval*
-apart (default: 1 hour). This prevents schedules like "every minute". Take-over routines are not limited because they
-don't create backups.
+apart (default: 60 minutes; the admin can allow down to 5 minutes). This prevents schedules like "every minute" by
+accident. Take-over routines are not limited because they don't create backups. Quick select offers *Every 15 minutes*
+and *Every 30 minutes* — they're only accepted if the admin allows intervals that short.
 
 ## Keep
 
@@ -159,14 +161,15 @@ Default: `Auto {routine} {date}` → *Auto Hourly 2026-11-24 13:00*. Up to 200 c
 
 ## Rename taken-over backups
 
-Only for **take over** routines, optional. When switched on, a backup gets a new name the moment this routine takes it
-over (also when you assign it to the routine by hand).
+Only for **take over** routines, optional. The field **Name template for taken-over backups** sits at the bottom of
+the routine card — in the same place where create routines have their *Name template*. If you fill it in, a backup
+gets a new name the moment this routine takes it over (also when you assign it to the routine by hand).
 
 | | |
 | --- | --- |
-| Default when switched on | `{routine} {date}` → *Weekly 2026-11-24 13:00* |
+| Empty (default) | the backup keeps its current name |
+| Filled in, e.g. `{routine} {date}` | → *Weekly 2026-11-24 13:00* |
 | Allowed | up to 200 characters; the result is cut at 255 |
-| Off | the backup keeps its current name |
 
 Placeholders:
 
@@ -239,7 +242,7 @@ Changes in the editor are only applied when you click **Save**. **Discard change
 | Number of routines ≤ admin limit (default 10) | *At most 10 routines per server are allowed.* |
 | Every routine has a unique name | *The routine name "Hourly" is used twice.* |
 | Valid schedule | *"Hourly": invalid schedule "…"* |
-| Create routines respect the minimum interval | *"Hourly": backups may be created at most every 1 hour(s).* |
+| Create routines respect the minimum interval | *"Hourly": backups may be created at most every 60 minute(s).* |
 | Take-over routines have a valid source, no cycles | *"Weekly": please choose a source routine …* |
 | Total *Keep* ≤ admin limit and ≤ backup limit | *This server's backup limit is 5, but the routines would need 6 slots.* |
 | At least one routine when automatic backups are switched on | *Please add at least one routine or apply a template first.* |

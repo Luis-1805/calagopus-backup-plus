@@ -98,7 +98,7 @@ export const overviewSchema = z.object({
   log: z.array(logEntrySchema),
   limits: z.object({
     globallyEnabled: z.boolean(),
-    minIntervalHours: z.number(),
+    minIntervalMinutes: z.number(),
     maxKeepTotal: z.number(),
     maxRoutines: z.number(),
     allowCustomRoutines: z.boolean(),
@@ -110,6 +110,7 @@ export const overviewSchema = z.object({
   defaultTemplateId: z.string(),
   timezone: z.string(),
   timezoneSource: z.enum(['server', 'node', 'extension', 'fallback']),
+  extensionVersion: z.string().optional(),
 });
 export type Overview = z.infer<typeof overviewSchema>;
 
@@ -138,7 +139,7 @@ export type ConfigUpdate = z.infer<typeof configUpdateSchema>;
 
 export const adminSettingsSchema = z.object({
   enabled: z.boolean(),
-  minIntervalHours: z.number().int().min(1).max(168),
+  minIntervalMinutes: z.number().int().min(5).max(10080),
   maxKeepTotal: z.number().int().min(1).max(500),
   maxRoutines: z.number().int().min(1).max(50),
   allowCustomRoutines: z.boolean(),
@@ -161,6 +162,8 @@ export type AdminOverview = z.infer<typeof adminOverviewSchema>;
 
 /** Common schedules (6 fields: second minute hour day month weekday); labels live in translations.ts. */
 export const cronPresets = [
+  { key: 'every15m', value: '0 */15 * * * *' },
+  { key: 'every30m', value: '0 */30 * * * *' },
   { key: 'hourly', value: '0 0 * * * *' },
   { key: 'every2h', value: '0 0 */2 * * *' },
   { key: 'every6h', value: '0 0 */6 * * *' },

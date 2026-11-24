@@ -62,12 +62,12 @@ pub fn validate(
             let gap = schedule::min_gap(&cron, timezone, chrono::Utc::now().naive_utc())
                 .ok_or_else(|| Msg::new("val.no_future_runs").arg("name", name))?;
             // 1 Minute Toleranz für Sommerzeit-Umstellungen
-            let min = chrono::Duration::hours(settings.min_interval_hours as i64)
+            let min = chrono::Duration::minutes(settings.min_interval_minutes as i64)
                 - chrono::Duration::minutes(1);
             if gap < min {
                 return Err(Msg::new("val.min_interval")
                     .arg("name", name)
-                    .arg("hours", settings.min_interval_hours));
+                    .arg("minutes", settings.min_interval_minutes));
             }
         }
     }
@@ -113,4 +113,48 @@ pub fn validate(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate;
+    use crate::{
+        models::{Routine, RoutineSource},
+        settings::ExtensionSettingsData,
+    };
+
+    fn routine(cron: &str) -> Routine {
+        Routine {
+            uuid: uuid::Uuid::from_u128(1),
+            server_uuid: uuid::Uuid::nil(),
+            name: "R".into(),
+            enabled: true,
+            position: 0,
+            cron: cron.into(),
+            source: RoutineSource::Create,
+            source_routine_uuid: None,
+            keep_count: 3,
+            max_age_hours: 0,
+            name_template: "Auto {routine} {date}".into(),
+            rename_template: None,
+            ignored_files: Vec::new(),
+            next_run: None,
+            last_run: None,
+            last_error: None,
+        }
+    }
+
+    #[test]
+    fn minimum_interval_in_minutes() {
+        let mut settings = ExtensionSettingsData::default();
+
+        // Standard: 60 Minuten
+        assert!(validate(&[routine("0 0 * * * *")], &settings, None).is_ok());
+        assert!(validate(&[routine("0 */30 * * * *")], &settings, None).is_err());
+
+        // Admin erlaubt 15 Minuten
+        settings.min_interval_minutes = 15;
+        assert!(validate(&[routine("0 */15 * * * *")], &settings, None).is_ok());
+        assert!(validate(&[routine("0 */5 * * * *")], &settings, None).is_err());
+    }
 }

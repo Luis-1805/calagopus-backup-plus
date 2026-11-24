@@ -138,7 +138,7 @@ Template IDs are listed in `GET /` (`templates[].id`). Built-in IDs: `gfs-kompak
   ],
   "log": [ { "level": "info", "message": "…", "created": "…" } ],
   "limits": {
-    "globally_enabled": true, "min_interval_hours": 1, "max_keep_total": 50, "max_routines": 10,
+    "globally_enabled": true, "min_interval_minutes": 60, "max_keep_total": 50, "max_routines": 10,
     "allow_custom_routines": true, "can_customize": true, "backup_limit": 6, "backups_total": 5
   },
   "templates": [ { "id": "gfs-kompakt", "name": "GFS compact (5 backups)", "builtin": true, "routines": [] } ],
@@ -170,7 +170,7 @@ Base path: `/api/admin/extensions/dev.backupplus.gfsbackups`
 ```json
 {
   "enabled": true,
-  "min_interval_hours": 1,
+  "min_interval_minutes": 60,
   "max_keep_total": 50,
   "default_template_id": "gfs-kompakt",
   "default_timezone": "Europe/Berlin",

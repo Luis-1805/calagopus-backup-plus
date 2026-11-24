@@ -96,3 +96,27 @@ impl Extension for ExtensionStruct {
         Arc::new(settings::ExtensionSettingsDataDeserializer)
     }
 }
+
+#[cfg(test)]
+mod version_tests {
+    /// Die Oberfläche kennt ihre eigene Version (frontend/src/version.ts). Sie muss zur
+    /// Crate-Version passen, sonst meldet der Server-Tab fälschlich eine veraltete Oberfläche.
+    #[test]
+    fn frontend_version_matches_crate_version() {
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        // Repository: backend/ und frontend/ nebeneinander; im Panel: frontend/ im Crate-Ordner.
+        let candidates = [
+            manifest.join("../frontend/src/version.ts"),
+            manifest.join("frontend/src/version.ts"),
+        ];
+        let Some(source) = candidates.iter().find_map(|p| std::fs::read_to_string(p).ok()) else {
+            panic!("frontend/src/version.ts not found");
+        };
+
+        let expected = format!("'{}'", env!("CARGO_PKG_VERSION"));
+        assert!(
+            source.contains(&expected),
+            "frontend/src/version.ts must contain {expected}"
+        );
+    }
+}

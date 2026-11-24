@@ -44,6 +44,7 @@ import {
   type RoutineInput,
 } from './lib/schemas.ts';
 import { useExtTranslations } from './translations.ts';
+import { FRONTEND_VERSION } from './version.ts';
 
 const REFRESH_MS = 30_000;
 
@@ -278,6 +279,14 @@ export default function ServerPage() {
         {!limits.globallyEnabled && (
           <Alert color='yellow' title={tExt('server.alert.globallyDisabledTitle', {})}>
             {tExt('server.alert.globallyDisabled', {})}
+          </Alert>
+        )}
+        {overview.extensionVersion && overview.extensionVersion !== FRONTEND_VERSION && (
+          <Alert color='orange' title={tExt('server.alert.versionMismatchTitle', {})}>
+            {tExt('server.alert.versionMismatch', {
+              frontend: FRONTEND_VERSION,
+              installed: overview.extensionVersion,
+            })}
           </Alert>
         )}
         {overview.timezoneSource === 'fallback' && <Alert color='blue'>{tExt('server.alert.timezoneFallback', {})}</Alert>}
@@ -576,6 +585,13 @@ export default function ServerPage() {
             </Stack>
           )}
         </TitleCard>
+
+        <Text size='xs' c='dimmed' ta='right'>
+          {tExt('server.version', {
+            frontend: FRONTEND_VERSION,
+            installed: overview.extensionVersion ?? '?',
+          })}
+        </Text>
       </Stack>
     </ServerContentContainer>
   );

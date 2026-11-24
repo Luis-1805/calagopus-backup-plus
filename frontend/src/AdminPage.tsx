@@ -117,7 +117,7 @@ export default function AdminPage() {
   const form = useForm<AdminSettings>({
     initialValues: {
       enabled: true,
-      minIntervalHours: 1,
+      minIntervalMinutes: 60,
       maxKeepTotal: 50,
       maxRoutines: 10,
       allowCustomRoutines: true,
@@ -277,9 +277,11 @@ export default function AdminPage() {
               />
               <NumberInput
                 label={tExt('admin.settings.minInterval', {})}
-                min={1}
-                max={168}
-                {...form.getInputProps('minIntervalHours')}
+                description={tExt('admin.settings.minIntervalDescription', {})}
+                min={5}
+                max={10080}
+                step={5}
+                {...form.getInputProps('minIntervalMinutes')}
               />
               <NumberInput
                 label={tExt('admin.settings.maxKeep', {})}

@@ -11,9 +11,9 @@ mod settings {
     pub struct GeneralSettings {
         #[garde(skip)]
         enabled: bool,
-        #[garde(range(min = 1, max = 168))]
-        #[schema(minimum = 1, maximum = 168)]
-        min_interval_hours: u32,
+        #[garde(range(min = 5, max = 10080))]
+        #[schema(minimum = 5, maximum = 10080)]
+        min_interval_minutes: u32,
         #[garde(range(min = 1, max = 500))]
         #[schema(minimum = 1, maximum = 500)]
         max_keep_total: u32,
@@ -63,7 +63,7 @@ mod settings {
             ApiResponse::new_serialized(Response {
                 settings: super::GeneralSettings {
                     enabled: s.enabled,
-                    min_interval_hours: s.min_interval_hours,
+                    min_interval_minutes: s.min_interval_minutes,
                     max_keep_total: s.max_keep_total,
                     max_routines: s.max_routines,
                     allow_custom_routines: s.allow_custom_routines,
@@ -133,7 +133,7 @@ mod settings {
                 }
 
                 ext.enabled = data.enabled;
-                ext.min_interval_hours = data.min_interval_hours;
+                ext.min_interval_minutes = data.min_interval_minutes;
                 ext.max_keep_total = data.max_keep_total;
                 ext.max_routines = data.max_routines;
                 ext.allow_custom_routines = data.allow_custom_routines;

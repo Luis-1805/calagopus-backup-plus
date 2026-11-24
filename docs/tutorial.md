@@ -212,7 +212,8 @@ In the **Managed backups** table you can see this coming: before a backup moves,
 
 > [!NOTE]
 > The backup keeps its name *Auto Hourly …* — names are given when a backup is created. The **Routine** column tells
-> you where it belongs now. Want a fitting name? Switch on **Rename taken-over backups** in the *Daily* card — more in
+> you where it belongs now. Want a fitting name? Fill in **Name template for taken-over backups** at the bottom of the
+> *Daily* card — more in
 > [Part 7](#rename-taken-over-backups).
 
 ✅ **Checkpoint:** your history now reaches back a week, and you still only create one backup per hour.
@@ -304,8 +305,8 @@ Only *create* routines have a name template, because only they create backups.
 When *Daily* takes over an hourly backup, it's still called *Survival – 2026-11-24 13:00* (or *Auto Hourly …*). To
 make the backup list easier to read, give each take-over routine its own name:
 
-1. Open the *Daily* card and switch on **Rename taken-over backups**.
-2. The **New name** field appears with `{routine} {date}`. Change it to e.g. `Daily {day}`.
+1. Open the *Daily* card and scroll to the bottom of it.
+2. Fill in **Name template for taken-over backups**, e.g. `Daily {day}`. (Empty means: keep the name.)
 3. Do the same for *Weekly* (`Weekly {day}`) and *Monthly* (`Monthly {day}`), then **Save**.
 
 From now on a backup is renamed whenever it moves along the chain: *Survival – 2026-11-24 13:00* → *Daily 2026-11-24* →
