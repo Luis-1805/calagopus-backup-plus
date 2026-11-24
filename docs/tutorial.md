@@ -25,7 +25,7 @@ need time to accumulate — you can stop in between and come back.
 - [Part 4 — A daily history with "take over"](#part-4--a-daily-history-with-take-over)
 - [Part 5 — Weekly and monthly backups](#part-5--weekly-and-monthly-backups)
 - [Part 6 — The backup limit](#part-6--the-backup-limit)
-- [Part 7 — Polishing: names, ignored files, maximum age](#part-7--polishing-names-ignored-files-maximum-age)
+- [Part 7 — Polishing: names, renaming, ignored files, maximum age](#part-7--polishing-names-renaming-ignored-files-maximum-age)
 - [Part 8 — Check that everything works](#part-8--check-that-everything-works)
 - [Part 9 — Common beginner mistakes](#part-9--common-beginner-mistakes)
 - [Exercises](#exercises)
@@ -212,7 +212,8 @@ In the **Managed backups** table you can see this coming: before a backup moves,
 
 > [!NOTE]
 > The backup keeps its name *Auto Hourly …* — names are given when a backup is created. The **Routine** column tells
-> you where it belongs now.
+> you where it belongs now. Want a fitting name? Switch on **Rename taken-over backups** in the *Daily* card — more in
+> [Part 7](#rename-taken-over-backups).
 
 ✅ **Checkpoint:** your history now reaches back a week, and you still only create one backup per hour.
 
@@ -283,7 +284,7 @@ appears in the *Setup* card and saving shows *This server's backup limit is …*
 > If you can't get a higher limit, reduce *Keep* where it hurts least — usually *Daily* (e.g. 5 instead of 7) or
 > *Weekly*.
 
-## Part 7 — Polishing: names, ignored files, maximum age
+## Part 7 — Polishing: names, renaming, ignored files, maximum age
 
 Your strategy works. These options make it better.
 
@@ -297,6 +298,20 @@ Open the *Hourly* routine and change the **Name template**, for example:
 
 → *Survival – 2026-11-24 13:00*. Available placeholders: `{routine}`, `{date}`, `{day}`, `{time}`, `{server}`.
 Only *create* routines have a name template, because only they create backups.
+
+### Rename taken-over backups
+
+When *Daily* takes over an hourly backup, it's still called *Survival – 2026-11-24 13:00* (or *Auto Hourly …*). To
+make the backup list easier to read, give each take-over routine its own name:
+
+1. Open the *Daily* card and switch on **Rename taken-over backups**.
+2. The **New name** field appears with `{routine} {date}`. Change it to e.g. `Daily {day}`.
+3. Do the same for *Weekly* (`Weekly {day}`) and *Monthly* (`Monthly {day}`), then **Save**.
+
+From now on a backup is renamed whenever it moves along the chain: *Survival – 2026-11-24 13:00* → *Daily 2026-11-24* →
+*Weekly 2026-11-24* → *Monthly 2026-11-24*. `{date}`, `{day}` and `{time}` always refer to when the backup was
+**originally made**, and `{original}` inserts the previous name. Backups that were taken over before you switched
+this on keep their names.
 
 ### Leave out what you don't need
 

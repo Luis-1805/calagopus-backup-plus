@@ -145,9 +145,22 @@ creates a new one on the next run.
 
 ## Time zones
 
-Schedules are evaluated in the **server's time zone** (the time zone set for the server in the panel). If the server
-has none, UTC is used. The routine editor shows the time zone next to the schedule, and the *next run* preview uses it
-too. Daylight-saving changes are handled automatically.
+Schedules, and the dates in backup names, use the server's time zone. Backup Plus takes the first one that is set:
+
+| Order | Source | Where to change it |
+| :---: | --- | --- |
+| 1 | **Server** — the time zone set for the server | Server → **Settings → Time zone** |
+| 2 | **Node** — the system time zone the node (Wings) reports; this is what the server itself uses without its own setting | Node configuration |
+| 3 | **Backup Plus default** — set by the admin | Admin → Extensions → Backup Plus → *Default time zone* |
+| 4 | **UTC** — when none of the above is available | |
+
+The *Status* card on the Auto-Backups tab shows the time zone in use and where it comes from. If it falls back to UTC,
+a blue hint tells you how to set it. The routine editor shows the time zone next to each schedule, and the *next run*
+preview uses it too. Daylight-saving changes are handled automatically.
+
+> [!TIP]
+> Your schedules run an hour off? The server most likely has no time zone and falls back to UTC. Set it under
+> **Settings → Time zone** on the server (e.g. `Europe/Berlin`) — Backup Plus picks it up immediately.
 
 ---
 

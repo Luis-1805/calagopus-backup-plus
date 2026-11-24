@@ -50,6 +50,7 @@ Base path: `/api/client/servers/{server}/backup-plus`
       "keep_count": 3,
       "max_age_hours": 0,
       "name_template": "Auto {routine} {date}",
+      "rename_template": null,
       "ignored_files": ["logs/"]
     },
     {
@@ -63,6 +64,7 @@ Base path: `/api/client/servers/{server}/backup-plus`
       "keep_count": 1,
       "max_age_hours": 0,
       "name_template": "Auto {routine} {date}",
+      "rename_template": "Weekly {date}",
       "ignored_files": []
     }
   ]
@@ -74,6 +76,8 @@ Base path: `/api/client/servers/{server}/backup-plus`
 - To update an existing routine (and keep its schedule state), pass its `uuid` — the `GET` response contains it. Without
   a `uuid` a new routine is created. Routines missing from the list are removed (their backups are kept).
 - `source` is `create` or `promote` (= take over).
+- `rename_template` (optional, take-over routines only): new name for backups this routine takes over; `null` keeps
+  the name. Placeholders as in the [routine reference](routines.md#rename-taken-over-backups).
 - The response is the same as `GET /`.
 
 If the admin has disabled custom routines and the caller isn't an extension admin, `routines` is ignored and only
@@ -120,7 +124,7 @@ Template IDs are listed in `GET /` (`templates[].id`). Built-in IDs: `gfs-kompak
     {
       "uuid": "…", "name": "Hourly", "enabled": true, "position": 0, "cron": "0 0 * * * *",
       "source": "create", "source_routine_uuid": null, "keep_count": 3, "max_age_hours": 0,
-      "name_template": "Auto {routine} {date}", "ignored_files": [],
+      "name_template": "Auto {routine} {date}", "rename_template": null, "ignored_files": [],
       "next_run": "…", "last_run": "…", "last_error": null, "backup_count": 3
     }
   ],
@@ -139,11 +143,13 @@ Template IDs are listed in `GET /` (`templates[].id`). Built-in IDs: `gfs-kompak
   },
   "templates": [ { "id": "gfs-kompakt", "name": "GFS compact (5 backups)", "builtin": true, "routines": [] } ],
   "default_template_id": "gfs-kompakt",
-  "timezone": "Europe/Berlin"
+  "timezone": "Europe/Berlin",
+  "timezone_source": "server"
 }
 ```
 
-`planned.type` is one of `keep`, `move` (`from`, `to`), `delete` (`reason.kind`: `failed`, `too_old`, `over_keep`),
+`timezone_source` is `server`, `node`, `extension` (admin default) or `fallback` (UTC). `planned.type` is one of
+`keep`, `move` (`from`, `to`), `delete` (`reason.kind`: `failed`, `too_old`, `over_keep`),
 `pinned`, `running`, `failed_kept`, `unassigned`.
 
 ## Admin endpoints
@@ -166,7 +172,8 @@ Base path: `/api/admin/extensions/dev.backupplus.gfsbackups`
   "enabled": true,
   "min_interval_hours": 1,
   "max_keep_total": 50,
-  "max_routines": 10,
+  "default_template_id": "gfs-kompakt",
+  "default_timezone": "Europe/Berlin",
   "allow_custom_routines": true,
   "default_template_id": "gfs-kompakt",
   "max_backups_per_tick": 10,

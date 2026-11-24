@@ -35,6 +35,10 @@ pub struct TemplateRoutine {
     #[serde(default = "default_name_template")]
     #[garde(length(chars, min = 1, max = 200))]
     pub name_template: String,
+    /// Optional: neuer Name für übernommene Backups (nur bei `promote`).
+    #[serde(default)]
+    #[garde(inner(length(chars, max = 200)))]
+    pub rename_template: Option<String>,
     #[serde(default)]
     #[garde(length(max = 100), inner(length(chars, max = 255)))]
     pub ignored_files: Vec<String>,
@@ -103,6 +107,7 @@ fn routine(
         keep_count,
         max_age_hours,
         name_template: default_name_template(),
+        rename_template: None,
         ignored_files: Vec::new(),
     }
 }
@@ -209,6 +214,7 @@ pub fn to_routines(template: &Template, server_uuid: uuid::Uuid) -> Result<Vec<R
                 keep_count: r.keep_count,
                 max_age_hours: r.max_age_hours,
                 name_template: r.name_template.trim().to_string(),
+                rename_template: r.rename_template.clone(),
                 ignored_files: r.ignored_files.clone(),
                 next_run: None,
                 last_run: None,

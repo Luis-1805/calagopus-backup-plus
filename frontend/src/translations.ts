@@ -47,6 +47,8 @@ const translations = defineTranslations({
         limitTooLow:
           "This server's backup limit ({limit}) is lower than the total number of backups to keep ({total}). Ask an administrator to raise the limit (recommended: {recommended}).",
         customDisabled: 'Custom routines have been disabled by an administrator – you can apply one of the templates.',
+        timezoneFallback:
+          'No time zone is configured for this server, so schedules run in UTC. Set the time zone under Settings → Time zone to run them in your local time.',
       },
       card: {
         status: 'Status',
@@ -54,6 +56,12 @@ const translations = defineTranslations({
         paused: 'Paused',
         lastRun: 'Last run: {time}',
         timezone: 'Time zone: {timezone}',
+        timezoneSource: {
+          server: 'from the server settings',
+          node: 'default of the node',
+          extension: 'Backup Plus default',
+          fallback: 'fallback, nothing configured',
+        },
         managed: 'Managed backups',
         used: '{size} used',
         limit: 'Backup limit',
@@ -128,6 +136,9 @@ const translations = defineTranslations({
       sourceDescription:
         'When a backup falls out of this routine and the routine is due according to its schedule, it is taken over instead of deleted.',
       sourcePlaceholder: 'Choose a routine',
+      rename: 'Rename taken-over backups',
+      renameDescription: 'Gives a backup a new name when this routine takes it over.',
+      renameTemplate: 'New name',
       scheduleCreate: 'Schedule (when to back up)',
       schedulePromote: 'Schedule (when to take over)',
       scheduleDescription: 'Cron with seconds, time zone {timezone}',
@@ -166,6 +177,9 @@ const translations = defineTranslations({
         allowCustomDescription: 'Off: server users can only apply templates (admins always can).',
         defaultTemplate: 'Default template',
         defaultTemplateDescription: "Suggested to servers that aren't set up yet.",
+        defaultTimezone: 'Default time zone',
+        defaultTimezoneDescription:
+          "Used for servers that have no time zone of their own and whose node doesn't report one. Empty = UTC.",
         minInterval: 'Minimum interval between new backups (hours)',
         maxKeep: 'Max. backups kept per server',
         maxRoutines: 'Max. routines per server',

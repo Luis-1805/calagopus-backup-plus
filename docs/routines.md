@@ -12,6 +12,7 @@ Every field of a routine, what it does and which values are allowed.
 - [Maximum age](#maximum-age)
 - [Active](#active)
 - [Name template](#name-template)
+- [Rename taken-over backups](#rename-taken-over-backups)
 - [Ignored files](#ignored-files)
 - [Order of routines](#order-of-routines)
 - [Run now](#run-now)
@@ -152,8 +153,46 @@ Default: `Auto {routine} {date}` → *Auto Hourly 2026-11-24 13:00*. Up to 200 c
 255 characters. If the template results in an empty name, the panel's default backup name is used.
 
 > [!NOTE]
-> Backups keep their name when they move to another routine — a backup taken over by *Weekly* is still called
-> *Auto Hourly …*. The **Routine** column in the backup list always shows where it belongs now.
+> By default, backups keep their name when they move to another routine — a backup taken over by *Weekly* is still
+> called *Auto Hourly …*. The **Routine** column in the backup list always shows where it belongs now. To give it a
+> fitting name, use [Rename taken-over backups](#rename-taken-over-backups).
+
+## Rename taken-over backups
+
+Only for **take over** routines, optional. When switched on, a backup gets a new name the moment this routine takes it
+over (also when you assign it to the routine by hand).
+
+| | |
+| --- | --- |
+| Default when switched on | `{routine} {date}` → *Weekly 2026-11-24 13:00* |
+| Allowed | up to 200 characters; the result is cut at 255 |
+| Off | the backup keeps its current name |
+
+Placeholders:
+
+| Placeholder | Meaning |
+| --- | --- |
+| `{routine}` | Name of **this** routine (the one taking the backup over) |
+| `{date}`, `{day}`, `{time}` | When the backup was **originally created** — not when it was taken over — in the server's time zone |
+| `{server}` | Name of the server |
+| `{original}` | The backup's name right before renaming |
+
+Examples:
+
+| Template | Result for a backup created on 24 Nov 13:00 as *Auto Hourly 2026-11-24 13:00* |
+| --- | --- |
+| `{routine} {date}` | *Weekly 2026-11-24 13:00* |
+| `{server} – {routine} ({day})` | *Survival – Weekly (2026-11-24)* |
+| `{original} [kept as {routine}]` | *Auto Hourly 2026-11-24 13:00 [kept as Weekly]* |
+
+In a [chain](concepts.md#chains), each routine can rename again: e.g. *Daily* renames to `Daily {day}`, and *Weekly*
+later renames the same backup to `Weekly {day}`. `{original}` always refers to the name right before the current
+renaming. Renaming uses the panel's normal backup rename, so the new name also shows on the panel's **Backups** page.
+The log records every rename (*"…" renamed to "…"*).
+
+> [!TIP]
+> If you don't want backups renamed at all, leave `{routine}` out of the create routine's name template (e.g.
+> `{server} {date}`). Then no name ever becomes misleading.
 
 ## Ignored files
 

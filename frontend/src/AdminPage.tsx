@@ -11,6 +11,7 @@ import TitleCard from '@/elements/data-display/TitleCard.tsx';
 import NumberInput from '@/elements/input/NumberInput.tsx';
 import Switch from '@/elements/input/Switch.tsx';
 import TextInput from '@/elements/input/TextInput.tsx';
+import TimezoneInput from '@/elements/input/TimezoneInput.tsx';
 import { useToast } from '@/providers/ToastProvider.tsx';
 import {
   applyTemplateToAll,
@@ -59,6 +60,7 @@ function toDraft(template: Template): TemplateDraft {
       keepCount: r.keepCount,
       maxAgeHours: r.maxAgeHours,
       nameTemplate: r.nameTemplate,
+      renameTemplate: r.renameTemplate,
       ignoredFiles: r.ignoredFiles,
     })),
   };
@@ -80,6 +82,7 @@ function fromDraft(draft: TemplateDraft): Template {
       keepCount: r.keepCount,
       maxAgeHours: r.maxAgeHours,
       nameTemplate: r.nameTemplate,
+      renameTemplate: r.renameTemplate,
       ignoredFiles: r.ignoredFiles,
     })),
   };
@@ -119,6 +122,7 @@ export default function AdminPage() {
       maxRoutines: 10,
       allowCustomRoutines: true,
       defaultTemplateId: 'gfs-kompakt',
+      defaultTimezone: '',
       maxBackupsPerTick: 10,
       logRetention: 100,
     },
@@ -262,6 +266,14 @@ export default function AdminPage() {
                 data={templateOptions}
                 allowDeselect={false}
                 {...form.getInputProps('defaultTemplateId')}
+              />
+              <TimezoneInput
+                label={tExt('admin.settings.defaultTimezone', {})}
+                description={tExt('admin.settings.defaultTimezoneDescription', {})}
+                placeholder='UTC'
+                clearable
+                value={form.values.defaultTimezone || null}
+                onChange={(value) => form.setFieldValue('defaultTimezone', value ?? '')}
               />
               <NumberInput
                 label={tExt('admin.settings.minInterval', {})}

@@ -112,8 +112,9 @@ Nothing is deleted. The backups stay in the *Backup Plus (auto)* group and can b
 Yes — on the panel's normal **Backups** page, like any other backup.
 
 **Why is a backup called "Auto Hourly …" although it's my monthly backup?**
-Names are given when a backup is created and don't change when it moves to another routine. The **Routine** column
-shows where it belongs now.
+Names are given when a backup is created and, by default, don't change when it moves to another routine. The
+**Routine** column shows where it belongs now. Switch on [Rename taken-over backups](routines.md#rename-taken-over-backups)
+in the take-over routine to give such backups a fitting name automatically.
 
 **I deleted a routine. Where are its backups?**
 Still there, shown as *Not managed*. Assign them to another routine or delete them manually.
@@ -126,7 +127,13 @@ may be deleted on the next rotation if *Keep* is 1.
 A new backup is being created or has just finished; the next rotation (within 5 minutes) removes the one that fell out.
 
 **In which time zone do schedules run?**
-The server's time zone, falling back to UTC. Times in the UI are shown in your browser's local time.
+The server's time zone; if it has none, the node's time zone, then the admin's Backup Plus default, then UTC (see
+[Time zones](concepts.md#time-zones)). The *Status* card shows which one is used. Times in the UI are shown in your
+browser's local time.
+
+**My schedules run an hour off / the time zone shows UTC.**
+The server has no time zone of its own and its node reports none. Set it under the server's **Settings → Time zone**
+(e.g. `Europe/Berlin`), or ask the admin to set a *Default time zone* for Backup Plus.
 
 **Which languages are supported?**
 English and German. Everything follows the language you selected in your panel account settings.

@@ -34,6 +34,7 @@ mod types {
         pub keep_count: i32,
         pub max_age_hours: i32,
         pub name_template: String,
+        pub rename_template: Option<String>,
         pub ignored_files: Vec<String>,
         pub next_run: Option<chrono::DateTime<chrono::Utc>>,
         pub last_run: Option<chrono::DateTime<chrono::Utc>>,
@@ -54,6 +55,7 @@ mod types {
                 keep_count: routine.keep_count,
                 max_age_hours: routine.max_age_hours,
                 name_template: routine.name_template,
+                rename_template: routine.rename_template,
                 ignored_files: routine.ignored_files,
                 next_run: routine.next_run.map(|t| t.and_utc()),
                 last_run: routine.last_run.map(|t| t.and_utc()),
@@ -101,6 +103,7 @@ mod types {
         pub templates: Vec<Template>,
         pub default_template_id: String,
         pub timezone: String,
+        pub timezone_source: crate::schedule::TimezoneSource,
     }
 }
 
@@ -128,6 +131,8 @@ async fn build_overview(
     };
 
     let settings = crate::settings::load(state).await;
+    let (timezone, timezone_source) =
+        schedule::resolve_timezone(state, server, &settings.default_timezone).await;
     let stored = Policy::by_server_uuid(&state.database, server.uuid).await?;
     let exists = stored.is_some();
     let policy = stored.unwrap_or_else(|| Policy::default_for(server.uuid));
@@ -201,7 +206,8 @@ async fn build_overview(
         },
         templates: settings.all_templates(lang),
         default_template_id: settings.default_template_id.clone(),
-        timezone: schedule::server_timezone(server.timezone.as_deref()).name().to_string(),
+        timezone: timezone.name().to_string(),
+        timezone_source,
     })
 }
 
@@ -287,6 +293,9 @@ mod put {
         #[garde(length(chars, min = 1, max = 200))]
         #[schema(min_length = 1, max_length = 200)]
         name_template: String,
+        #[serde(default)]
+        #[garde(inner(length(chars, max = 200)))]
+        rename_template: Option<String>,
         #[garde(length(max = 100), inner(length(chars, max = 255)))]
         #[schema(max_items = 100)]
         ignored_files: Vec<String>,
@@ -333,7 +342,7 @@ mod put {
 
         let settings = crate::settings::load(&state).await;
         let can_customize = super::can_customize(&settings, &permissions);
-        let timezone = schedule::server_timezone(server.timezone.as_deref());
+        let (timezone, _) = schedule::resolve_timezone(&state, &server, &settings.default_timezone).await;
         let now = crate::engine::now();
 
         let previous = Policy::by_server_uuid(&state.database, server.uuid).await?;
@@ -394,6 +403,13 @@ mod put {
                     keep_count: input.keep_count,
                     max_age_hours: input.max_age_hours,
                     name_template: input.name_template.trim().to_string(),
+                    rename_template: match input.source {
+                        RoutineSource::Promote => input
+                            .rename_template
+                            .map(|t| t.trim().to_string())
+                            .filter(|t| !t.is_empty()),
+                        RoutineSource::Create => None,
+                    },
                     ignored_files: input
                         .ignored_files
                         .into_iter()
@@ -524,7 +540,9 @@ mod apply_template {
                 &settings,
                 Some(&ServerLimits {
                     backup_limit: server.backup_limit,
-                    timezone: schedule::server_timezone(server.timezone.as_deref()),
+                    timezone: schedule::resolve_timezone(&state, &server, &settings.default_timezone)
+                        .await
+                        .0,
                 }),
             ) {
                 return ApiResponse::error(
@@ -830,6 +848,28 @@ mod backup {
                 },
             )
             .await;
+
+            // Wie beim automatischen Übernehmen: optional passend umbenennen.
+            if let Some(routine) = target
+                && routine.rename_template.is_some()
+            {
+                let settings = crate::settings::load(&state).await;
+                let (timezone, _) =
+                    crate::schedule::resolve_timezone(&state, &server, &settings.default_timezone)
+                        .await;
+                if let Some((old, new)) =
+                    crate::engine::rename_for_routine(&state, &server, timezone, backup.uuid, routine)
+                        .await?
+                {
+                    models::write_log(
+                        &state.database,
+                        server.uuid,
+                        "info",
+                        crate::i18n::Msg::new("log.renamed").arg("old", old).arg("new", new),
+                    )
+                    .await;
+                }
+            }
 
             ApiResponse::new_serialized(Response {}).ok()
         }

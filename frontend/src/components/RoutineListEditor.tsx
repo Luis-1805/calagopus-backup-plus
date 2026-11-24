@@ -35,6 +35,7 @@ export function emptyRoutine(position: number): RoutineInput {
     keepCount: 3,
     maxAgeHours: 0,
     nameTemplate: 'Auto {routine} {date}',
+    renameTemplate: null,
     ignoredFiles: [],
   };
 }
@@ -163,21 +164,45 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
                     update(index, {
                       source: value === 'promote' ? 'promote' : 'create',
                       sourceKey: value === 'promote' ? (sourceOptions[0]?.value ?? null) : null,
+                      renameTemplate: value === 'promote' ? routine.renameTemplate : null,
                     })
                   }
                 />
               </SimpleGrid>
 
               {routine.source === 'promote' && (
-                <Select
-                  label={tExt('editor.source', {})}
-                  description={tExt('editor.sourceDescription', {})}
-                  disabled={readOnly}
-                  value={routine.sourceKey}
-                  data={sourceOptions}
-                  placeholder={tExt('editor.sourcePlaceholder', {})}
-                  onChange={(value) => update(index, { sourceKey: value })}
-                />
+                <>
+                  <Select
+                    label={tExt('editor.source', {})}
+                    description={tExt('editor.sourceDescription', {})}
+                    disabled={readOnly}
+                    value={routine.sourceKey}
+                    data={sourceOptions}
+                    placeholder={tExt('editor.sourcePlaceholder', {})}
+                    onChange={(value) => update(index, { sourceKey: value })}
+                  />
+                  <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                    <Switch
+                      label={tExt('editor.rename', {})}
+                      description={tExt('editor.renameDescription', {})}
+                      disabled={readOnly}
+                      checked={routine.renameTemplate !== null}
+                      onChange={(e) =>
+                        update(index, { renameTemplate: e.currentTarget.checked ? '{routine} {date}' : null })
+                      }
+                    />
+                    {routine.renameTemplate !== null && (
+                      <TextInput
+                        label={tExt('editor.renameTemplate', {})}
+                        description='{routine}, {date}, {day}, {time}, {server}, {original}'
+                        disabled={readOnly}
+                        value={routine.renameTemplate}
+                        maxLength={200}
+                        onChange={(e) => update(index, { renameTemplate: e.currentTarget.value })}
+                      />
+                    )}
+                  </SimpleGrid>
+                </>
               )}
 
               <SimpleGrid cols={{ base: 1, sm: 2 }}>
@@ -280,5 +305,6 @@ export function cleanRoutines(routines: RoutineInput[]): RoutineInput[] {
     name: r.name.trim(),
     cron: r.cron.trim(),
     ignoredFiles: r.ignoredFiles.map((f) => f.trim()).filter((f) => f.length > 0),
+    renameTemplate: r.source === 'promote' && r.renameTemplate?.trim() ? r.renameTemplate.trim() : null,
   }));
 }

@@ -175,6 +175,7 @@ fn tutorial_chain_settles_at_17_and_reaches_months_back() {
         keep_count: keep,
         max_age_hours: 0,
         name_template: "Auto {routine} {date}".into(),
+        rename_template: None,
         ignored_files: Vec::new(),
     };
     let template = Template {

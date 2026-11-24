@@ -59,6 +59,7 @@ function toInputs(overview: Overview): RoutineInput[] {
     keepCount: r.keepCount,
     maxAgeHours: r.maxAgeHours,
     nameTemplate: r.nameTemplate,
+    renameTemplate: r.renameTemplate,
     ignoredFiles: r.ignoredFiles,
   }));
 }
@@ -279,6 +280,7 @@ export default function ServerPage() {
             {tExt('server.alert.globallyDisabled', {})}
           </Alert>
         )}
+        {overview.timezoneSource === 'fallback' && <Alert color='blue'>{tExt('server.alert.timezoneFallback', {})}</Alert>}
         {policy.lastError && (
           <Alert color='red' title={tExt('server.alert.lastRunFailed', {})}>
             {policy.lastError}
@@ -303,6 +305,9 @@ export default function ServerPage() {
               </Text>
               <Text size='sm' c='dimmed'>
                 {tExt('server.card.timezone', { timezone: overview.timezone })}
+              </Text>
+              <Text size='xs' c='dimmed'>
+                ({tExt(`server.card.timezoneSource.${overview.timezoneSource}`, {})})
               </Text>
             </Stack>
           </TitleCard>

@@ -92,7 +92,8 @@ async fn load_context(state: &State, server_uuid: uuid::Uuid) -> Result<Context,
         .await?
         .unwrap_or_else(|| Policy::default_for(server_uuid));
     let server = Server::by_uuid(&state.database, server_uuid).await?;
-    let timezone = schedule::server_timezone(server.timezone.as_deref());
+    let default_tz = settings::load(state).await.default_timezone;
+    let (timezone, _) = schedule::resolve_timezone(state, &server, &default_tz).await;
     let group_uuid = ensure_group(state, &mut policy).await?;
     let routines = Routine::all_for_server(&state.database, server_uuid).await?;
 
@@ -219,6 +220,30 @@ pub async fn ensure_group(state: &State, policy: &mut Policy) -> Result<uuid::Uu
     Ok(group.uuid)
 }
 
+/// Setzt die Platzhalter einer Namensvorlage ein. Ergebnis leer → `None`.
+///
+/// `at` ist der Zeitpunkt für `{date}`, `{day}` und `{time}` (beim Umbenennen: die Erstellung
+/// des Backups), `original` der bisherige Name (nur beim Umbenennen sinnvoll).
+pub fn render_template(
+    template: &str,
+    server_name: &str,
+    routine: &str,
+    original: &str,
+    at: chrono::DateTime<chrono_tz::Tz>,
+) -> Option<String> {
+    let name = template
+        .replace("{date}", &at.format("%Y-%m-%d %H:%M").to_string())
+        .replace("{time}", &at.format("%H:%M").to_string())
+        .replace("{day}", &at.format("%Y-%m-%d").to_string())
+        .replace("{routine}", routine)
+        .replace("{tier}", routine)
+        .replace("{server}", server_name)
+        .replace("{original}", original);
+
+    let name = name.trim();
+    (!name.is_empty()).then(|| name.chars().take(255).collect())
+}
+
 fn render_name(
     template: &str,
     server: &Server,
@@ -226,22 +251,53 @@ fn render_name(
     timezone: chrono_tz::Tz,
 ) -> compact_str::CompactString {
     let now = chrono::Utc::now().with_timezone(&timezone);
-    let name = template
-        .replace("{date}", &now.format("%Y-%m-%d %H:%M").to_string())
-        .replace("{time}", &now.format("%H:%M").to_string())
-        .replace("{day}", &now.format("%Y-%m-%d").to_string())
-        .replace("{routine}", routine)
-        .replace("{tier}", routine)
-        .replace("{server}", &server.name);
 
-    let name = name.trim();
-    let name: String = if name.is_empty() {
-        ServerBackup::default_name().to_string()
-    } else {
-        name.chars().take(255).collect()
+    render_template(template, &server.name, routine, "", now)
+        .unwrap_or_else(|| ServerBackup::default_name().to_string())
+        .into()
+}
+
+/// Benennt ein Backup nach der Umbenennungs-Vorlage einer Routine um.
+/// Gibt `(alter Name, neuer Name)` zurück, wenn sich der Name geändert hat.
+pub async fn rename_for_routine(
+    state: &State,
+    server: &Server,
+    timezone: chrono_tz::Tz,
+    backup_uuid: uuid::Uuid,
+    routine: &Routine,
+) -> Result<Option<(String, String)>, anyhow::Error> {
+    use shared::models::{UpdatableModel, server_backup::UpdateServerBackupOptions};
+
+    let Some(template) = routine.rename_template.as_deref().filter(|t| !t.trim().is_empty())
+    else {
+        return Ok(None);
+    };
+    let Some(mut backup) =
+        ServerBackup::by_server_uuid_uuid(&state.database, server.uuid, backup_uuid).await?
+    else {
+        return Ok(None);
     };
 
-    name.into()
+    let old = backup.name.to_string();
+    let created = backup.created.and_utc().with_timezone(&timezone);
+    let Some(new) = render_template(template, &server.name, &routine.name, &old, created) else {
+        return Ok(None);
+    };
+    if new == old {
+        return Ok(None);
+    }
+
+    backup
+        .update(
+            state,
+            UpdateServerBackupOptions {
+                name: Some(new.as_str().into()),
+                ..Default::default()
+            },
+        )
+        .await?;
+
+    Ok(Some((old, new)))
 }
 
 /// Ergebnis eines Erstellversuchs.
@@ -508,6 +564,33 @@ async fn apply_retention(
                         .arg("to", routine_name(*to)),
                 )
                 .await;
+
+                // Optional: dem Backup einen zur neuen Routine passenden Namen geben.
+                if let Some(target) = ctx.routines.iter().find(|r| r.uuid == *to) {
+                    match rename_for_routine(state, &ctx.server, ctx.timezone, *uuid, target).await {
+                        Ok(Some((old, new))) => {
+                            models::write_log(
+                                &state.database,
+                                server_uuid,
+                                "info",
+                                Msg::new("log.renamed").arg("old", old).arg("new", new),
+                            )
+                            .await;
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            models::write_log(
+                                &state.database,
+                                server_uuid,
+                                "error",
+                                Msg::new("log.rename_failed")
+                                    .arg("name", name_of(*uuid))
+                                    .arg_msg("error", &Msg::from_error(&err)),
+                            )
+                            .await;
+                        }
+                    }
+                }
             }
             PlannedAction::Delete { reason } => {
                 match delete_backup(state, server_uuid, *uuid, &reason.msg().render(crate::i18n::Lang::En)).await {
@@ -635,6 +718,30 @@ mod tests {
         assert_eq!(wait_decision(Some(at(4, 0)), Some(at(5, 0)), at(4, 30)), (true, false));
         // Der nächste Termin ist erreicht: dieser wird übersprungen.
         assert_eq!(wait_decision(Some(at(4, 0)), Some(at(5, 0)), at(5, 0)), (false, false));
+    }
+
+    #[test]
+    fn rename_template_uses_creation_time_and_original_name() {
+        use super::render_template;
+
+        // Erstellt 24.11. 23:30 UTC = 25.11. 00:30 in Berlin.
+        let created = chrono::NaiveDate::from_ymd_opt(2026, 11, 24)
+            .unwrap()
+            .and_hms_opt(23, 30, 0)
+            .unwrap()
+            .and_utc()
+            .with_timezone(&chrono_tz::Europe::Berlin);
+
+        assert_eq!(
+            render_template("{routine} {date}", "Survival", "Weekly", "Auto Hourly x", created).as_deref(),
+            Some("Weekly 2026-11-25 00:30")
+        );
+        assert_eq!(
+            render_template("{original} (kept as {routine})", "Survival", "Monthly", "Auto Hourly x", created)
+                .as_deref(),
+            Some("Auto Hourly x (kept as Monthly)")
+        );
+        assert_eq!(render_template("   ", "S", "R", "O", created), None);
     }
 
     #[test]

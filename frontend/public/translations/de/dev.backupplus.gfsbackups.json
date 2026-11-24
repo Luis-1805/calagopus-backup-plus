@@ -56,7 +56,8 @@
         "lastRunFailed": "Letzter Lauf fehlgeschlagen",
         "routineError": "Routine „{name}“",
         "limitTooLow": "Das Backup-Limit dieses Servers ({limit}) ist kleiner als die Summe der behaltenen Backups ({total}). Bitte einen Administrator, das Limit zu erhöhen (empfohlen: {recommended}).",
-        "customDisabled": "Eigene Routinen sind vom Administrator deaktiviert – du kannst eine der Vorlagen anwenden."
+        "customDisabled": "Eigene Routinen sind vom Administrator deaktiviert – du kannst eine der Vorlagen anwenden.",
+        "timezoneFallback": "Für diesen Server ist keine Zeitzone eingestellt, deshalb laufen die Zeitpläne in UTC. Stelle die Zeitzone unter Einstellungen → Zeitzone ein, damit sie in deiner Ortszeit laufen."
       },
       "card": {
         "status": "Status",
@@ -69,7 +70,13 @@
         "limit": "Backup-Limit",
         "limitHint": "alle Backups dieses Servers",
         "routines": "Routinen",
-        "routineLine": "{name} · nächster: {next}"
+        "routineLine": "{name} · nächster: {next}",
+        "timezoneSource": {
+          "server": "aus den Server-Einstellungen",
+          "node": "Standard des Nodes",
+          "extension": "Backup-Plus-Standard",
+          "fallback": "Notlösung, nichts eingestellt"
+        }
       },
       "setup": {
         "title": "Einrichtung",
@@ -135,6 +142,9 @@
       "source": "Quelle",
       "sourceDescription": "Fällt ein Backup aus dieser Routine heraus und diese Routine ist laut Zeitplan dran, wird es übernommen statt gelöscht.",
       "sourcePlaceholder": "Routine wählen",
+      "rename": "Übernommene Backups umbenennen",
+      "renameDescription": "Gibt einem Backup einen neuen Namen, wenn diese Routine es übernimmt.",
+      "renameTemplate": "Neuer Name",
       "scheduleCreate": "Zeitplan (wann gesichert wird)",
       "schedulePromote": "Zeitplan (wann übernommen wird)",
       "scheduleDescription": "Cron mit Sekunden, Zeitzone {timezone}",
@@ -173,6 +183,8 @@
         "allowCustomDescription": "Aus: Server-Nutzer können nur Vorlagen anwenden (Admins dürfen immer).",
         "defaultTemplate": "Standard-Vorlage",
         "defaultTemplateDescription": "Wird Servern ohne Einrichtung vorgeschlagen.",
+        "defaultTimezone": "Standard-Zeitzone",
+        "defaultTimezoneDescription": "Für Server ohne eigene Zeitzone, deren Node auch keine meldet. Leer = UTC.",
         "minInterval": "Kleinster Abstand neuer Backups (Stunden)",
         "maxKeep": "Max. behaltene Backups pro Server",
         "maxRoutines": "Max. Routinen pro Server",

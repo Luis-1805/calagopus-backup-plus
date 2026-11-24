@@ -24,6 +24,9 @@ mod settings {
         allow_custom_routines: bool,
         #[garde(length(chars, max = 64))]
         default_template_id: String,
+        #[garde(length(chars, max = 64))]
+        #[serde(default)]
+        default_timezone: String,
         #[garde(range(min = 1, max = 1000))]
         #[schema(minimum = 1, maximum = 1000)]
         max_backups_per_tick: u32,
@@ -65,6 +68,7 @@ mod settings {
                     max_routines: s.max_routines,
                     allow_custom_routines: s.allow_custom_routines,
                     default_template_id: s.default_template_id,
+                    default_timezone: s.default_timezone,
                     max_backups_per_tick: s.max_backups_per_tick,
                     log_retention: s.log_retention,
                 },
@@ -107,6 +111,16 @@ mod settings {
             permissions.has_admin_permission("extensions.manage")?;
             let lang = crate::i18n::Lang::from_code(&user.language);
 
+            let timezone = data.default_timezone.trim();
+            if !timezone.is_empty() && timezone.parse::<chrono_tz::Tz>().is_err() {
+                return ApiResponse::error(
+                    crate::i18n::Msg::new("err.invalid_timezone")
+                        .arg("timezone", timezone)
+                        .render(lang),
+                )
+                .ok();
+            }
+
             {
                 let mut settings = state.settings.get_mut().await?;
                 let ext: &mut crate::settings::ExtensionSettingsData =
@@ -124,6 +138,7 @@ mod settings {
                 ext.max_routines = data.max_routines;
                 ext.allow_custom_routines = data.allow_custom_routines;
                 ext.default_template_id = data.default_template_id.clone();
+                ext.default_timezone = data.default_timezone.trim().to_string();
                 ext.max_backups_per_tick = data.max_backups_per_tick;
                 ext.log_retention = data.log_retention;
 
@@ -389,7 +404,9 @@ mod apply_template {
                     &settings,
                     Some(&ServerLimits {
                         backup_limit: server.backup_limit,
-                        timezone: schedule::server_timezone(server.timezone.as_deref()),
+                        timezone: schedule::resolve_timezone(&state, &server, &settings.default_timezone)
+                            .await
+                            .0,
                     }),
                 ) {
                     skipped.push(format!("{}: {}", server.name, err.render(lang)));

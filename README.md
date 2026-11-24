@@ -55,9 +55,10 @@ routines (hourly → daily → weekly → monthly).
 ### 🗂️ Backup routines
 - Any number of routines per server
 - **Create** new backups or **take over** expiring ones
-- Cron schedule in the server's time zone, with presets, a plain-language preview and the next run time
+- Cron schedule in the server's time zone (server → node → admin default → UTC), with presets, a plain-language preview and the next run time
 - Keep the newest *N*, optional maximum age
 - Name template (`{routine}`, `{date}`, `{day}`, `{time}`, `{server}`) and ignored files per routine
+- Optionally **rename** backups when a routine takes them over (e.g. *Weekly 2026-11-24*)
 - Pause, reorder or run a routine right now
 
 </td>

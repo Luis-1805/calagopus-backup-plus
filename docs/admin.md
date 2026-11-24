@@ -33,6 +33,7 @@ The extension card in the extension list shows a one-line version of this.
 | **Backup Plus active** | on | | Main switch. Off: no backups are created or deleted on any server. Servers show a *Disabled globally* notice. Settings and routines are kept. |
 | **Allow custom routines** | on | | Off: server users can only apply templates; the routine editor becomes read-only. Users with the admin permission `extensions.manage` can always edit routines. |
 | **Default template** | GFS compact | | Preselected in the template list of servers that aren't set up yet. |
+| **Default time zone** | empty (UTC) | any IANA time zone | Used for servers that have no time zone of their own and whose node doesn't report one. See [Time zones](concepts.md#time-zones). |
 | **Minimum interval between new backups** | 1 h | 1–168 h | Smallest allowed gap between two runs of a *create* routine. Protects nodes from schedules like "every minute". |
 | **Max. backups kept per server** | 50 | 1–500 | Upper limit for the sum of *Keep* over all routines of a server. |
 | **Max. routines per server** | 10 | 1–50 | Upper limit for the number of routines per server. |

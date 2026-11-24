@@ -47,6 +47,7 @@ See [Run now](routines.md#run-now).
 | 🟠 **Routine "…"** | The last run of that routine failed | Same as above; the message is specific to the routine |
 | 🔴 **Backup limit too low** (in *Setup*) | The server's backup limit is lower than the total *Keep* of your routines | Ask an admin to raise the limit to the recommended value |
 | 🔵 **Custom routines disabled** (in *Setup*) | The admin only allows templates | Apply one of the templates |
+| 🔵 **No time zone configured** | Neither the server nor its node has a time zone, so schedules run in UTC | Set the server's time zone under **Settings → Time zone** |
 
 Errors are cleared automatically by the next successful run.
 
@@ -54,7 +55,7 @@ Errors are cleared automatically by the next successful run.
 
 | Card | Shows |
 | --- | --- |
-| **Status** | *Active* or *Paused*, the time of the last run and the server's time zone |
+| **Status** | *Active* or *Paused*, the time of the last run, the time zone in use and where it comes from (server settings, node default, Backup Plus default or fallback) — see [Time zones](concepts.md#time-zones) |
 | **Managed backups** | How many backups Backup Plus manages right now (not counting those about to be deleted) and the storage they use |
 | **Backup limit** | All backups of the server (including manual ones) / the server's limit — red if the limit is too low |
 | **Routines** | One line per routine: `backups/keep`, name and next run (*soon* = due now, *paused* = routine paused) |
@@ -138,6 +139,7 @@ The last 50 entries for this server, newest first. Each entry has a level (*info
 | --- | --- |
 | *Started "…" for routine "Hourly"* | A backup was started |
 | *"…" moved from "Hourly" to "Weekly"* | A take-over routine adopted a backup |
+| *"…" renamed to "…"* | A take-over routine renamed the backup it adopted ([Rename taken-over backups](routines.md#rename-taken-over-backups)) |
 | *"…" deleted (older than the 3 newest backups of routine "Hourly")* | Rotation removed a backup |
 | *"Daily" waits for the running backup to finish* | Another automatic backup is still running; this routine starts right after it |
 | *"Hourly" skipped: …* | A scheduled backup was skipped — see [Troubleshooting](troubleshooting.md#backup-was-skipped) |

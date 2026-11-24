@@ -40,6 +40,7 @@ export const routineSchema = z.object({
   keepCount: z.number(),
   maxAgeHours: z.number(),
   nameTemplate: z.string(),
+  renameTemplate: z.string().nullable(),
   ignoredFiles: z.array(z.string()),
   nextRun: z.coerce.date().nullable(),
   lastRun: z.coerce.date().nullable(),
@@ -76,6 +77,7 @@ export const templateRoutineSchema = z.object({
   keepCount: z.number().int().min(1).max(500),
   maxAgeHours: z.number().int().min(0).max(87600),
   nameTemplate: z.string().min(1).max(200),
+  renameTemplate: z.string().max(200).nullable(),
   ignoredFiles: z.array(z.string()),
 });
 export type TemplateRoutine = z.infer<typeof templateRoutineSchema>;
@@ -107,6 +109,7 @@ export const overviewSchema = z.object({
   templates: z.array(templateSchema),
   defaultTemplateId: z.string(),
   timezone: z.string(),
+  timezoneSource: z.enum(['server', 'node', 'extension', 'fallback']),
 });
 export type Overview = z.infer<typeof overviewSchema>;
 
@@ -121,6 +124,7 @@ export const routineInputSchema = z.object({
   keepCount: z.number(),
   maxAgeHours: z.number(),
   nameTemplate: z.string(),
+  renameTemplate: z.string().nullable(),
   ignoredFiles: z.array(z.string()),
 });
 export type RoutineInput = z.infer<typeof routineInputSchema>;
@@ -139,6 +143,7 @@ export const adminSettingsSchema = z.object({
   maxRoutines: z.number().int().min(1).max(50),
   allowCustomRoutines: z.boolean(),
   defaultTemplateId: z.string().max(64),
+  defaultTimezone: z.string().max(64),
   maxBackupsPerTick: z.number().int().min(1).max(1000),
   logRetention: z.number().int().min(10).max(10000),
 });

@@ -176,6 +176,8 @@ pub struct Routine {
     pub keep_count: i32,
     pub max_age_hours: i32,
     pub name_template: String,
+    /// Optional: neuer Name für Backups, die diese Routine übernimmt.
+    pub rename_template: Option<String>,
     pub ignored_files: Vec<String>,
     pub next_run: Option<chrono::NaiveDateTime>,
     pub last_run: Option<chrono::NaiveDateTime>,
@@ -194,7 +196,7 @@ impl Routine {
         let rows = sqlx::query(
             r#"
             SELECT uuid, server_uuid, name, enabled, position, cron, source, source_routine_uuid,
-                keep_count, max_age_hours, name_template, ignored_files, next_run, last_run, last_error
+                keep_count, max_age_hours, name_template, rename_template, ignored_files, next_run, last_run, last_error
             FROM backup_plus_routines
             WHERE server_uuid = $1
             ORDER BY position, created, uuid
@@ -219,6 +221,7 @@ impl Routine {
                     keep_count: row.try_get("keep_count")?,
                     max_age_hours: row.try_get("max_age_hours")?,
                     name_template: row.try_get("name_template")?,
+                    rename_template: row.try_get("rename_template")?,
                     ignored_files: row.try_get("ignored_files")?,
                     next_run: row.try_get("next_run")?,
                     last_run: row.try_get("last_run")?,
@@ -277,9 +280,9 @@ impl Routine {
                 r#"
                 INSERT INTO backup_plus_routines (
                     uuid, server_uuid, name, enabled, position, cron, source, source_routine_uuid,
-                    keep_count, max_age_hours, name_template, ignored_files, next_run
+                    keep_count, max_age_hours, name_template, ignored_files, next_run, rename_template
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, $10, $11, $12)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, $10, $11, $12, $13)
                 ON CONFLICT (uuid) DO UPDATE SET
                     name = EXCLUDED.name,
                     enabled = EXCLUDED.enabled,
@@ -290,6 +293,7 @@ impl Routine {
                     keep_count = EXCLUDED.keep_count,
                     max_age_hours = EXCLUDED.max_age_hours,
                     name_template = EXCLUDED.name_template,
+                    rename_template = EXCLUDED.rename_template,
                     ignored_files = EXCLUDED.ignored_files,
                     next_run = EXCLUDED.next_run
                 "#,
@@ -306,6 +310,7 @@ impl Routine {
             .bind(&routine.name_template)
             .bind(&routine.ignored_files)
             .bind(routine.next_run)
+            .bind(routine.rename_template.as_deref().map(str::trim).filter(|t| !t.is_empty()))
             .execute(&mut *transaction)
             .await?;
         }

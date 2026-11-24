@@ -22,6 +22,8 @@ pub struct ExtensionSettingsData {
     pub allow_custom_routines: bool,
     /// Vorlage, die für noch nicht eingerichtete Server vorgeschlagen wird.
     pub default_template_id: String,
+    /// Zeitzone für Server ohne eigene Zeitzone, wenn auch der Node keine meldet (leer = UTC).
+    pub default_timezone: String,
     /// Wie viele Server pro Minute höchstens bearbeitet werden (Lastverteilung).
     pub max_backups_per_tick: u32,
     /// Wie viele Protokolleinträge pro Server aufgehoben werden.
@@ -39,6 +41,7 @@ impl Default for ExtensionSettingsData {
             max_routines: 10,
             allow_custom_routines: true,
             default_template_id: DEFAULT_TEMPLATE_ID.into(),
+            default_timezone: String::new(),
             max_backups_per_tick: 10,
             log_retention: 100,
             templates: Vec::new(),
@@ -72,6 +75,7 @@ impl SettingsSerializeExt for ExtensionSettingsData {
                 "max_backups_per_tick",
                 self.max_backups_per_tick.to_compact_string(),
             )
+            .write_raw_setting("default_timezone", self.default_timezone.to_compact_string())
             .write_raw_setting("log_retention", self.log_retention.to_compact_string())
             .write_serde_setting("templates", &self.templates)?)
     }
@@ -115,6 +119,11 @@ impl SettingsDeserializeExt for ExtensionSettingsDataDeserializer {
                 .take_raw_setting("default_template_id")
                 .map(|s| s.to_string())
                 .unwrap_or(defaults.default_template_id),
+            default_timezone: deserializer
+                .take_raw_setting("default_timezone")
+                .map(|s| s.to_string())
+                .filter(|s| s.is_empty() || s.parse::<chrono_tz::Tz>().is_ok())
+                .unwrap_or_default(),
             max_backups_per_tick: deserializer
                 .take_raw_setting("max_backups_per_tick")
                 .and_then(|s| s.parse().ok())

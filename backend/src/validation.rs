@@ -42,6 +42,14 @@ pub fn validate(
             return Err(Msg::new("val.name_template").arg("name", name));
         }
 
+        if routine
+            .rename_template
+            .as_deref()
+            .is_some_and(|t| t.chars().count() > 200)
+        {
+            return Err(Msg::new("val.rename_template").arg("name", name));
+        }
+
         let cron = schedule::parse(&routine.cron).map_err(|err| {
             Msg::new("val.invalid_cron")
                 .arg("name", name)
