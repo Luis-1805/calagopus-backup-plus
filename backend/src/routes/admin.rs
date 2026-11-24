@@ -7,6 +7,31 @@ mod settings {
     use super::State;
     use utoipa_axum::{router::OpenApiRouter, routes};
 
+    #[derive(utoipa::ToSchema, serde::Serialize, serde::Deserialize, garde::Validate)]
+    pub struct GeneralSettings {
+        #[garde(skip)]
+        enabled: bool,
+        #[garde(range(min = 1, max = 168))]
+        #[schema(minimum = 1, maximum = 168)]
+        min_interval_hours: u32,
+        #[garde(range(min = 1, max = 500))]
+        #[schema(minimum = 1, maximum = 500)]
+        max_keep_total: u32,
+        #[garde(range(min = 1, max = 50))]
+        #[schema(minimum = 1, maximum = 50)]
+        max_routines: u32,
+        #[garde(skip)]
+        allow_custom_routines: bool,
+        #[garde(length(chars, max = 64))]
+        default_template_id: String,
+        #[garde(range(min = 1, max = 1000))]
+        #[schema(minimum = 1, maximum = 1000)]
+        max_backups_per_tick: u32,
+        #[garde(range(min = 10, max = 10000))]
+        #[schema(minimum = 10, maximum = 10000)]
+        log_retention: u32,
+    }
+
     mod get {
         use serde::Serialize;
         use shared::{
@@ -18,8 +43,124 @@ mod settings {
 
         #[derive(ToSchema, Serialize)]
         struct Response {
-            #[schema(inline)]
-            settings: crate::settings::ExtensionSettingsData,
+            settings: super::GeneralSettings,
+        }
+
+        #[utoipa::path(get, path = "/", responses(
+            (status = OK, body = inline(Response)),
+            (status = UNAUTHORIZED, body = ApiError),
+        ))]
+        pub async fn route(state: GetState, permissions: GetPermissionManager) -> ApiResponseResult {
+            permissions.has_admin_permission("extensions.read")?;
+
+            let s = crate::settings::load(&state).await;
+            ApiResponse::new_serialized(Response {
+                settings: super::GeneralSettings {
+                    enabled: s.enabled,
+                    min_interval_hours: s.min_interval_hours,
+                    max_keep_total: s.max_keep_total,
+                    max_routines: s.max_routines,
+                    allow_custom_routines: s.allow_custom_routines,
+                    default_template_id: s.default_template_id,
+                    max_backups_per_tick: s.max_backups_per_tick,
+                    log_retention: s.log_retention,
+                },
+            })
+            .ok()
+        }
+    }
+
+    mod put {
+        use axum::http::StatusCode;
+        use serde::Serialize;
+        use shared::{
+            ApiError, GetState,
+            models::{admin_activity::GetAdminActivityLogger, user::GetPermissionManager},
+            response::{ApiResponse, ApiResponseResult},
+        };
+        use utoipa::ToSchema;
+
+        #[derive(ToSchema, Serialize)]
+        struct Response {}
+
+        #[utoipa::path(put, path = "/", responses(
+            (status = OK, body = inline(Response)),
+            (status = BAD_REQUEST, body = ApiError),
+            (status = UNAUTHORIZED, body = ApiError),
+        ), request_body = inline(super::GeneralSettings))]
+        pub async fn route(
+            state: GetState,
+            permissions: GetPermissionManager,
+            activity_logger: GetAdminActivityLogger,
+            shared::Payload(data): shared::Payload<super::GeneralSettings>,
+        ) -> ApiResponseResult {
+            if let Err(errors) = shared::utils::validate_data(&data) {
+                return ApiResponse::new_serialized(ApiError::new_strings_value(errors))
+                    .with_status(StatusCode::BAD_REQUEST)
+                    .ok();
+            }
+
+            permissions.has_admin_permission("extensions.manage")?;
+
+            {
+                let mut settings = state.settings.get_mut().await?;
+                let ext: &mut crate::settings::ExtensionSettingsData =
+                    settings.find_mut_extension_settings()?;
+
+                if !data.default_template_id.is_empty()
+                    && ext.find_template(&data.default_template_id).is_none()
+                {
+                    return ApiResponse::error("Die Standard-Vorlage existiert nicht.").ok();
+                }
+
+                ext.enabled = data.enabled;
+                ext.min_interval_hours = data.min_interval_hours;
+                ext.max_keep_total = data.max_keep_total;
+                ext.max_routines = data.max_routines;
+                ext.allow_custom_routines = data.allow_custom_routines;
+                ext.default_template_id = data.default_template_id.clone();
+                ext.max_backups_per_tick = data.max_backups_per_tick;
+                ext.log_retention = data.log_retention;
+
+                settings.save().await?;
+            }
+
+            activity_logger
+                .log(
+                    "backup-plus:settings.update",
+                    serde_json::to_value(&data).unwrap_or_default(),
+                )
+                .await;
+
+            ApiResponse::new_serialized(Response {}).ok()
+        }
+    }
+
+    pub fn router(state: &State) -> OpenApiRouter<State> {
+        OpenApiRouter::new()
+            .routes(routes!(get::route))
+            .routes(routes!(put::route))
+            .with_state(state.clone())
+    }
+}
+
+mod templates {
+    use super::State;
+    use utoipa_axum::{router::OpenApiRouter, routes};
+
+    mod get {
+        use crate::templates::Template;
+        use serde::Serialize;
+        use shared::{
+            ApiError, GetState,
+            models::user::GetPermissionManager,
+            response::{ApiResponse, ApiResponseResult},
+        };
+        use utoipa::ToSchema;
+
+        #[derive(ToSchema, Serialize)]
+        struct Response {
+            templates: Vec<Template>,
         }
 
         #[utoipa::path(get, path = "/", responses(
@@ -30,13 +171,14 @@ mod settings {
             permissions.has_admin_permission("extensions.read")?;
 
             ApiResponse::new_serialized(Response {
-                settings: crate::settings::load(&state).await,
+                templates: crate::settings::load(&state).await.all_templates(),
             })
             .ok()
         }
     }
 
     mod put {
+        use crate::{templates::{self, Template}, validation};
         use axum::http::StatusCode;
         use garde::Validate;
         use serde::{Deserialize, Serialize};
@@ -45,28 +187,21 @@ mod settings {
             models::{admin_activity::GetAdminActivityLogger, user::GetPermissionManager},
             response::{ApiResponse, ApiResponseResult},
         };
+        use std::collections::HashSet;
         use utoipa::ToSchema;
 
         #[derive(ToSchema, Validate, Deserialize)]
         pub struct Payload {
-            #[garde(skip)]
-            enabled: bool,
-            #[garde(range(min = 1, max = 168))]
-            #[schema(minimum = 1, maximum = 168)]
-            min_interval_hours: u32,
-            #[garde(range(min = 1, max = 500))]
-            #[schema(minimum = 1, maximum = 500)]
-            max_keep_total: u32,
-            #[garde(range(min = 1, max = 1000))]
-            #[schema(minimum = 1, maximum = 1000)]
-            max_backups_per_tick: u32,
-            #[garde(range(min = 10, max = 10000))]
-            #[schema(minimum = 10, maximum = 10000)]
-            log_retention: u32,
+            /// Nur eigene Vorlagen; eingebaute werden ignoriert.
+            #[garde(length(max = 50), dive)]
+            #[schema(max_items = 50)]
+            templates: Vec<Template>,
         }
 
         #[derive(ToSchema, Serialize)]
-        struct Response {}
+        struct Response {
+            templates: Vec<Template>,
+        }
 
         #[utoipa::path(put, path = "/", responses(
             (status = OK, body = inline(Response)),
@@ -87,34 +222,54 @@ mod settings {
 
             permissions.has_admin_permission("extensions.manage")?;
 
+            let builtin_ids: HashSet<String> =
+                templates::builtin().into_iter().map(|t| t.id).collect();
+            let custom: Vec<Template> = data
+                .templates
+                .into_iter()
+                .filter(|t| !t.builtin && !builtin_ids.contains(&t.id))
+                .collect();
+
+            let mut ids = HashSet::new();
+            let settings = crate::settings::load(&state).await;
+            for template in &custom {
+                if !ids.insert(template.id.clone()) {
+                    return ApiResponse::error(format!("Die Vorlagen-ID \"{}\" ist doppelt.", template.id)).ok();
+                }
+
+                let routines = match templates::to_routines(template, uuid::Uuid::nil()) {
+                    Ok(routines) => routines,
+                    Err(err) => {
+                        return ApiResponse::error(format!("Vorlage \"{}\": {err}", template.name)).ok();
+                    }
+                };
+                if let Err(err) = validation::validate(&routines, &settings, None) {
+                    return ApiResponse::error(format!("Vorlage \"{}\": {err}", template.name)).ok();
+                }
+            }
+
             {
                 let mut settings = state.settings.get_mut().await?;
                 let ext: &mut crate::settings::ExtensionSettingsData =
                     settings.find_mut_extension_settings()?;
-
-                ext.enabled = data.enabled;
-                ext.min_interval_hours = data.min_interval_hours;
-                ext.max_keep_total = data.max_keep_total;
-                ext.max_backups_per_tick = data.max_backups_per_tick;
-                ext.log_retention = data.log_retention;
-
+                ext.templates = custom.clone();
+                if ext.find_template(&ext.default_template_id.clone()).is_none() {
+                    ext.default_template_id = templates::DEFAULT_TEMPLATE_ID.into();
+                }
                 settings.save().await?;
             }
 
             activity_logger
                 .log(
-                    "backup-plus:settings.update",
-                    serde_json::json!({
-                        "enabled": data.enabled,
-                        "min_interval_hours": data.min_interval_hours,
-                        "max_keep_total": data.max_keep_total,
-                        "max_backups_per_tick": data.max_backups_per_tick,
-                        "log_retention": data.log_retention,
-                    }),
+                    "backup-plus:templates.update",
+                    serde_json::json!({ "templates": custom.iter().map(|t| &t.id).collect::<Vec<_>>() }),
                 )
                 .await;
 
-            ApiResponse::new_serialized(Response {}).ok()
+            ApiResponse::new_serialized(Response {
+                templates: templates::all(&custom),
+            })
+            .ok()
         }
     }
 
@@ -122,6 +277,132 @@ mod settings {
         OpenApiRouter::new()
             .routes(routes!(get::route))
             .routes(routes!(put::route))
+            .with_state(state.clone())
+    }
+}
+
+mod apply_template {
+    use super::State;
+    use utoipa_axum::{router::OpenApiRouter, routes};
+
+    mod post {
+        use crate::{
+            models::{self, Policy, Routine},
+            schedule, templates,
+            validation::{self, ServerLimits},
+        };
+        use serde::{Deserialize, Serialize};
+        use shared::{
+            ApiError, GetState,
+            models::{
+                ByUuid, admin_activity::GetAdminActivityLogger, server::Server,
+                user::GetPermissionManager,
+            },
+            response::{ApiResponse, ApiResponseResult},
+        };
+        use utoipa::ToSchema;
+
+        #[derive(ToSchema, Deserialize)]
+        pub struct Payload {
+            template_id: String,
+            /// Nur Server ohne eigene Routinen.
+            #[serde(default = "default_true")]
+            only_unconfigured: bool,
+            /// Automatische Backups gleich aktivieren.
+            #[serde(default)]
+            enable: bool,
+        }
+
+        fn default_true() -> bool {
+            true
+        }
+
+        #[derive(ToSchema, Serialize)]
+        struct Response {
+            applied: u32,
+            skipped: Vec<String>,
+        }
+
+        #[utoipa::path(post, path = "/", responses(
+            (status = OK, body = inline(Response)),
+            (status = BAD_REQUEST, body = ApiError),
+            (status = UNAUTHORIZED, body = ApiError),
+        ), request_body = inline(Payload))]
+        pub async fn route(
+            state: GetState,
+            permissions: GetPermissionManager,
+            activity_logger: GetAdminActivityLogger,
+            shared::Payload(data): shared::Payload<Payload>,
+        ) -> ApiResponseResult {
+            permissions.has_admin_permission("extensions.manage")?;
+
+            let settings = crate::settings::load(&state).await;
+            let Some(template) = settings.find_template(&data.template_id) else {
+                return ApiResponse::error("Vorlage nicht gefunden.").ok();
+            };
+
+            let mut applied = 0;
+            let mut skipped = Vec::new();
+            for server_uuid in models::all_server_uuids(&state.database, data.only_unconfigured).await? {
+                let server = match Server::by_uuid(&state.database, server_uuid).await {
+                    Ok(server) => server,
+                    Err(_) => continue,
+                };
+
+                let routines = match templates::to_routines(&template, server.uuid) {
+                    Ok(routines) => routines,
+                    Err(err) => return ApiResponse::error(err).ok(),
+                };
+                if let Err(err) = validation::validate(
+                    &routines,
+                    &settings,
+                    Some(&ServerLimits {
+                        backup_limit: server.backup_limit,
+                        timezone: schedule::server_timezone(server.timezone.as_deref()),
+                    }),
+                ) {
+                    skipped.push(format!("{}: {err}", server.name));
+                    continue;
+                }
+
+                let mut policy = Policy::by_server_uuid(&state.database, server.uuid)
+                    .await?
+                    .unwrap_or_else(|| Policy::default_for(server.uuid));
+                if data.enable {
+                    policy.enabled = true;
+                }
+                policy.last_error = None;
+                policy.upsert(&state.database).await?;
+                Routine::replace_all(&state.database, server.uuid, &routines).await?;
+                models::write_log(
+                    &state.database,
+                    server.uuid,
+                    "info",
+                    format!("Vorlage \"{}\" vom Admin angewendet", template.name),
+                )
+                .await;
+                applied += 1;
+            }
+
+            activity_logger
+                .log(
+                    "backup-plus:templates.apply",
+                    serde_json::json!({
+                        "template": template.id,
+                        "applied": applied,
+                        "skipped": skipped.len(),
+                        "enable": data.enable,
+                    }),
+                )
+                .await;
+
+            ApiResponse::new_serialized(Response { applied, skipped }).ok()
+        }
+    }
+
+    pub fn router(state: &State) -> OpenApiRouter<State> {
+        OpenApiRouter::new()
+            .routes(routes!(post::route))
             .with_state(state.clone())
     }
 }
@@ -169,6 +450,8 @@ mod overview {
 pub fn router(state: &State) -> OpenApiRouter<State> {
     OpenApiRouter::new()
         .nest("/settings", settings::router(state))
+        .nest("/templates", templates::router(state))
+        .nest("/apply-template", apply_template::router(state))
         .nest("/overview", overview::router(state))
         .with_state(state.clone())
 }

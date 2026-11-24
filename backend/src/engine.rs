@@ -1,9 +1,9 @@
-//! Ausführung: Backups anlegen, befördern und löschen.
+//! Ausführung: Backups anlegen, zwischen Routinen verschieben und löschen.
 
 use crate::{
-    models::{self, ManagedBackup, Policy, Tier},
-    retention::{self, PlannedAction},
-    settings,
+    models::{self, ManagedBackup, Policy, Routine, RoutineSource},
+    retention::{self, BackupSpec, PlannedAction, RoutineSpec},
+    schedule, settings,
 };
 use shared::{
     State,
@@ -26,23 +26,13 @@ pub fn now() -> chrono::NaiveDateTime {
     chrono::Utc::now().naive_utc()
 }
 
-/// Nächster Termin: volle Stunde + Intervall + Minuten-Versatz.
-pub fn next_run_after(policy: &Policy, from: chrono::NaiveDateTime) -> chrono::NaiveDateTime {
-    use chrono::Timelike;
-
-    let hour_start = from
-        .with_minute(0)
-        .and_then(|t| t.with_second(0))
-        .and_then(|t| t.with_nanosecond(0))
-        .unwrap_or(from);
-    let offset = chrono::Duration::minutes(policy.minute_offset.clamp(0, 59) as i64);
-
-    let mut next = hour_start + offset;
-    while next <= from {
-        next += chrono::Duration::hours(policy.interval_hours.max(1) as i64);
-    }
-
-    next
+/// Was einen Lauf ausgelöst hat.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Trigger {
+    /// Minütlicher Hintergrund-Task: fällige Routinen ausführen.
+    Scheduled,
+    /// "Jetzt sichern": bestimmte Routine (oder die erste erstellende) sofort ausführen.
+    Manual(Option<uuid::Uuid>),
 }
 
 /// Wird jede Minute vom Hintergrund-Task aufgerufen.
@@ -53,41 +43,32 @@ pub async fn tick(state: State) -> Result<(), anyhow::Error> {
     }
 
     let now = now();
-
-    // 1. Fällige Richtlinien: aufräumen + neues Backup erstellen.
-    let due = Policy::all_due(&state.database, now).await?;
+    let due = Policy::servers_due(&state.database, now).await?;
     let mut handled = std::collections::HashSet::new();
 
-    for (index, mut policy) in due.into_iter().enumerate() {
-        handled.insert(policy.server_uuid);
-
+    for (index, server_uuid) in due.into_iter().enumerate() {
         // Lastverteilung: Überzählige im nächsten Tick erledigen.
         if index as u32 >= settings.max_backups_per_tick {
-            continue;
+            break;
         }
+        handled.insert(server_uuid);
 
-        if let Err(err) = run_policy(&state, &mut policy, true).await {
-            tracing::error!(server = %policy.server_uuid, "backup-plus: Lauf fehlgeschlagen: {err:#?}");
-            models::write_log(&state.database, policy.server_uuid, "error", format!("{err:#}"))
-                .await;
-            policy.last_error = Some(format!("{err:#}"));
-            policy.last_run = Some(now);
-            policy.next_run = Some(next_run_after(&policy, now));
-            policy.save_run_state(&state.database).await?;
+        if let Err(err) = run_server(&state, server_uuid, Trigger::Scheduled).await {
+            tracing::error!(server = %server_uuid, "backup-plus: Lauf fehlgeschlagen: {err:#?}");
+            models::write_log(&state.database, server_uuid, "error", format!("{err:#}")).await;
         }
     }
 
-    // 2. Alle 5 Minuten: Bereinigung auch für nicht fällige Richtlinien
-    //    (damit gerade fertig gewordene Backups zeitnah rotiert werden).
+    // Alle 5 Minuten: Rotation für alle aktiven Server (fertig gewordene Backups einsortieren).
     use chrono::Timelike;
     if now.minute().is_multiple_of(5) {
-        for policy in Policy::all_enabled(&state.database).await? {
-            if handled.contains(&policy.server_uuid) {
+        for server_uuid in Policy::servers_enabled(&state.database).await? {
+            if handled.contains(&server_uuid) {
                 continue;
             }
 
-            if let Err(err) = apply_retention(&state, &policy, 0).await {
-                tracing::warn!(server = %policy.server_uuid, "backup-plus: Bereinigung fehlgeschlagen: {err:#?}");
+            if let Err(err) = run_retention(&state, server_uuid).await {
+                tracing::warn!(server = %server_uuid, "backup-plus: Bereinigung fehlgeschlagen: {err:#?}");
             }
         }
 
@@ -97,30 +78,102 @@ pub async fn tick(state: State) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-/// Führt eine Richtlinie aus. Mit `create = true` wird zusätzlich ein neues Backup erstellt.
-pub async fn run_policy(
+struct Context {
+    policy: Policy,
+    server: Server,
+    timezone: chrono_tz::Tz,
+    group_uuid: uuid::Uuid,
+    routines: Vec<Routine>,
+}
+
+async fn load_context(state: &State, server_uuid: uuid::Uuid) -> Result<Context, anyhow::Error> {
+    let mut policy = Policy::by_server_uuid(&state.database, server_uuid)
+        .await?
+        .unwrap_or_else(|| Policy::default_for(server_uuid));
+    let server = Server::by_uuid(&state.database, server_uuid).await?;
+    let timezone = schedule::server_timezone(server.timezone.as_deref());
+    let group_uuid = ensure_group(state, &mut policy).await?;
+    let routines = Routine::all_for_server(&state.database, server_uuid).await?;
+
+    Ok(Context {
+        policy,
+        server,
+        timezone,
+        group_uuid,
+        routines,
+    })
+}
+
+/// Nur Rotation, ohne neue Backups.
+pub async fn run_retention(state: &State, server_uuid: uuid::Uuid) -> Result<(), anyhow::Error> {
+    let mut ctx = load_context(state, server_uuid).await?;
+    apply_retention(state, &mut ctx, None).await?;
+    Ok(())
+}
+
+/// Rotation und (falls fällig bzw. manuell ausgelöst) ein neues Backup.
+pub async fn run_server(
     state: &State,
-    policy: &mut Policy,
-    create: bool,
+    server_uuid: uuid::Uuid,
+    trigger: Trigger,
 ) -> Result<Option<uuid::Uuid>, anyhow::Error> {
     let now = now();
-    let server = Server::by_uuid(&state.database, policy.server_uuid).await?;
+    let mut ctx = load_context(state, server_uuid).await?;
 
-    let group_uuid = ensure_group(state, policy).await?;
+    apply_retention(state, &mut ctx, None).await?;
 
-    let mut created = None;
-    if create {
-        created = create_backup(state, policy, &server, group_uuid).await?;
-    } else {
-        apply_retention(state, policy, 0).await?;
+    let target = match trigger {
+        Trigger::Scheduled => ctx
+            .routines
+            .iter()
+            .position(|r| r.source == RoutineSource::Create && r.is_due(now)),
+        Trigger::Manual(Some(uuid)) => ctx.routines.iter().position(|r| r.uuid == uuid),
+        Trigger::Manual(None) => ctx
+            .routines
+            .iter()
+            .position(|r| r.source == RoutineSource::Create && r.enabled)
+            .or_else(|| ctx.routines.iter().position(|r| r.source == RoutineSource::Create)),
+    };
+
+    let Some(index) = target else {
+        if matches!(trigger, Trigger::Manual(_)) {
+            return Err(anyhow::anyhow!(
+                "Es gibt keine Routine, die neue Backups erstellt."
+            ));
+        }
+        return Ok(None);
+    };
+
+    if ctx.routines[index].source != RoutineSource::Create {
+        return Err(anyhow::anyhow!(
+            "Die Routine \"{}\" übernimmt Backups aus einer anderen Routine und erstellt selbst keine.",
+            ctx.routines[index].name
+        ));
     }
 
-    policy.last_run = Some(now);
-    policy.last_error = None;
-    policy.next_run = Some(next_run_after(policy, now));
-    policy.save_run_state(&state.database).await?;
+    let result = create_backup(state, &mut ctx, index).await;
 
-    Ok(created)
+    // Beim geplanten Lauf den nächsten Termin setzen – auch bei Fehlern, damit nichts in Schleife läuft.
+    if trigger == Trigger::Scheduled {
+        let routine = &mut ctx.routines[index];
+        routine.next_run = schedule::parse(&routine.cron)
+            .ok()
+            .and_then(|cron| schedule::next_after(&cron, ctx.timezone, now));
+        routine.last_run = Some(now);
+        routine.last_error = result.as_ref().err().map(|err| format!("{err:#}"));
+        routine.save_run_state(&state.database).await?;
+    } else if result.is_ok() {
+        let routine = &mut ctx.routines[index];
+        routine.last_run = Some(now);
+        routine.last_error = None;
+        routine.save_run_state(&state.database).await?;
+    }
+
+    ctx.policy.last_run = Some(now);
+    ctx.policy.last_error = result.as_ref().err().map(|err| format!("{err:#}"));
+    ctx.policy.save_run_state(&state.database).await?;
+
+    result
 }
 
 /// Stellt sicher, dass es die eigene Backup-Gruppe gibt, und gibt deren UUID zurück.
@@ -146,7 +199,7 @@ pub async fn ensure_group(state: &State, policy: &mut Policy) -> Result<uuid::Uu
     .await?;
 
     policy.backup_group_uuid = Some(group.uuid);
-    policy.save_run_state(&state.database).await?;
+    policy.upsert(&state.database).await?;
     models::write_log(
         &state.database,
         policy.server_uuid,
@@ -158,13 +211,19 @@ pub async fn ensure_group(state: &State, policy: &mut Policy) -> Result<uuid::Uu
     Ok(group.uuid)
 }
 
-fn render_name(template: &str, server: &Server, tier: Tier) -> compact_str::CompactString {
-    let now = chrono::Utc::now();
+fn render_name(
+    template: &str,
+    server: &Server,
+    routine: &str,
+    timezone: chrono_tz::Tz,
+) -> compact_str::CompactString {
+    let now = chrono::Utc::now().with_timezone(&timezone);
     let name = template
         .replace("{date}", &now.format("%Y-%m-%d %H:%M").to_string())
         .replace("{time}", &now.format("%H:%M").to_string())
         .replace("{day}", &now.format("%Y-%m-%d").to_string())
-        .replace("{tier}", tier.label())
+        .replace("{routine}", routine)
+        .replace("{tier}", routine)
         .replace("{server}", &server.name);
 
     let name = name.trim();
@@ -179,48 +238,39 @@ fn render_name(template: &str, server: &Server, tier: Tier) -> compact_str::Comp
 
 async fn create_backup(
     state: &State,
-    policy: &Policy,
-    server: &Server,
-    group_uuid: uuid::Uuid,
+    ctx: &mut Context,
+    index: usize,
 ) -> Result<Option<uuid::Uuid>, anyhow::Error> {
-    let log = |level: &'static str, msg: String| models::write_log(&state.database, server.uuid, level, msg);
+    let server_uuid = ctx.server.uuid;
+    let routine_name = ctx.routines[index].name.clone();
+    let skip = |reason: &str| {
+        format!("\"{routine_name}\" übersprungen: {reason}")
+    };
 
-    if server.suspended {
-        log("warning", "Übersprungen: Server ist gesperrt".into()).await;
-        apply_retention(state, policy, 0).await?;
-        return Ok(None);
-    }
-    if matches!(
-        server.status,
+    let reason = if ctx.server.suspended {
+        Some("Server ist gesperrt")
+    } else if matches!(
+        ctx.server.status,
         Some(ServerStatus::Installing) | Some(ServerStatus::RestoringBackup)
     ) {
-        log(
-            "warning",
-            "Übersprungen: Server wird gerade installiert oder wiederhergestellt".into(),
-        )
-        .await;
-        apply_retention(state, policy, 0).await?;
-        return Ok(None);
-    }
-    if server.destination_node.is_some() {
-        log("warning", "Übersprungen: Server wird gerade übertragen".into()).await;
-        apply_retention(state, policy, 0).await?;
-        return Ok(None);
-    }
-
-    let running = ManagedBackup::count_running(
+        Some("Server wird gerade installiert oder wiederhergestellt")
+    } else if ctx.server.destination_node.is_some() {
+        Some("Server wird gerade übertragen")
+    } else if ManagedBackup::count_running(
         &state.database,
-        group_uuid,
+        ctx.group_uuid,
         now() - chrono::Duration::hours(STUCK_AFTER_HOURS),
     )
-    .await?;
-    if running > 0 {
-        log(
-            "warning",
-            "Übersprungen: Das vorherige automatische Backup läuft noch".into(),
-        )
-        .await;
-        apply_retention(state, policy, 0).await?;
+    .await?
+        > 0
+    {
+        Some("ein vorheriges automatisches Backup läuft noch")
+    } else {
+        None
+    };
+
+    if let Some(reason) = reason {
+        models::write_log(&state.database, server_uuid, "warning", skip(reason)).await;
         return Ok(None);
     }
 
@@ -228,41 +278,44 @@ async fn create_backup(
     let lock = state
         .cache
         .lock(
-            format!("servers::{}::backups", server.uuid),
+            format!("servers::{server_uuid}::backups"),
             Some(30),
             Some(5000),
         )
         .await?;
 
-    // Zuerst normal aufräumen; reicht das Limit danach nicht, einen stündlichen Platz freimachen.
-    apply_retention(state, policy, 0).await?;
-    let mut count = ServerBackup::count_by_server_uuid(&state.database, server.uuid).await?;
-    if count >= server.backup_limit as i64 && apply_retention(state, policy, 1).await? > 0 {
-        // Gelöschte Backups sind sofort als "deleting" markiert und zählen nicht mehr.
-        count = ServerBackup::count_by_server_uuid(&state.database, server.uuid).await?;
+    // Reicht das Backup-Limit nicht, in dieser Routine vorab einen Platz freimachen.
+    let routine_uuid = ctx.routines[index].uuid;
+    let mut count = ServerBackup::count_by_server_uuid(&state.database, server_uuid).await?;
+    if count >= ctx.server.backup_limit as i64
+        && apply_retention(state, ctx, Some(routine_uuid)).await? > 0
+    {
+        count = ServerBackup::count_by_server_uuid(&state.database, server_uuid).await?;
     }
-    if count >= server.backup_limit as i64 {
+    if count >= ctx.server.backup_limit as i64 {
         drop(lock);
+        let keep_total: i32 = ctx.routines.iter().map(|r| r.keep_count).sum();
         return Err(anyhow::anyhow!(
             "Backup-Limit des Servers erreicht ({count}/{}). Erhöhe das Limit auf mindestens {} oder reduziere die Anzahl behaltener Backups.",
-            server.backup_limit,
-            policy.keep_total() + 1
+            ctx.server.backup_limit,
+            keep_total + 1
         ));
     }
 
-    let metadata = ServerBackup::generate_metadata(state, server).await?;
-    let name = render_name(&policy.name_template, server, Tier::Hourly);
+    let routine = &ctx.routines[index];
+    let metadata = ServerBackup::generate_metadata(state, &ctx.server).await?;
+    let name = render_name(&routine.name_template, &ctx.server, &routine.name, ctx.timezone);
 
     let backup = ServerBackup::create(
         state,
         CreateServerBackupOptions {
-            server,
+            server: &ctx.server,
             name: name.clone(),
-            backup_group_uuid: Some(group_uuid),
+            backup_group_uuid: Some(ctx.group_uuid),
             system_backup_policy_uuid: None,
             database_instance: None,
             backup_configuration: None,
-            ignored_files: policy
+            ignored_files: routine
                 .ignored_files
                 .iter()
                 .filter(|f| !f.trim().is_empty())
@@ -275,88 +328,160 @@ async fn create_backup(
 
     drop(lock);
 
-    models::set_tier(&state.database, server.uuid, backup.uuid, Tier::Hourly, false).await?;
+    models::set_routine(&state.database, server_uuid, backup.uuid, Some(routine.uuid)).await?;
     log_activity(
         state,
-        server.uuid,
+        server_uuid,
         "server:backup.create",
         serde_json::json!({
             "source": "backup-plus",
             "uuid": backup.uuid,
             "name": backup.name,
-            "backup_group_uuid": group_uuid,
+            "routine": routine.name,
+            "backup_group_uuid": ctx.group_uuid,
         }),
     )
     .await;
-    log("info", format!("Backup \"{name}\" gestartet")).await;
+    models::write_log(
+        &state.database,
+        server_uuid,
+        "info",
+        format!("\"{name}\" für Routine \"{}\" gestartet", routine.name),
+    )
+    .await;
 
     Ok(Some(backup.uuid))
 }
 
+/// Baut die Planungs-Eingaben aus Routinen und Backups.
+pub fn build_specs(
+    routines: &[Routine],
+    backups: &[ManagedBackup],
+    now: chrono::NaiveDateTime,
+) -> (Vec<RoutineSpec>, Vec<BackupSpec>) {
+    let routine_specs = routines
+        .iter()
+        .map(|r| RoutineSpec {
+            uuid: r.uuid,
+            name: r.name.clone(),
+            enabled: r.enabled,
+            position: r.position,
+            keep: r.keep_count,
+            max_age: (r.max_age_hours > 0).then(|| chrono::Duration::hours(r.max_age_hours as i64)),
+            promote_from: match r.source {
+                RoutineSource::Promote => r.source_routine_uuid,
+                RoutineSource::Create => None,
+            },
+            due: r.source == RoutineSource::Promote && r.is_due(now),
+        })
+        .collect();
+
+    let backup_specs = backups
+        .iter()
+        .map(|b| BackupSpec {
+            uuid: b.uuid,
+            routine: b.routine_uuid,
+            created: b.created,
+            completed: b.completed.is_some(),
+            successful: b.successful,
+            locked: b.locked,
+        })
+        .collect();
+
+    (routine_specs, backup_specs)
+}
+
 /// Wendet die Rotation an. Gibt die Anzahl der angestoßenen Löschungen zurück.
-pub async fn apply_retention(
+async fn apply_retention(
     state: &State,
-    policy: &Policy,
-    reserve_hourly: i32,
+    ctx: &mut Context,
+    reserve: Option<uuid::Uuid>,
 ) -> Result<u64, anyhow::Error> {
-    let Some(group_uuid) = policy.backup_group_uuid else {
-        return Ok(0);
+    let now = now();
+    let server_uuid = ctx.server.uuid;
+    let backups = ManagedBackup::all_for_group(&state.database, server_uuid, ctx.group_uuid).await?;
+    let (routine_specs, backup_specs) = build_specs(&ctx.routines, &backups, now);
+    let plan = retention::plan(
+        &backup_specs,
+        &routine_specs,
+        ctx.policy.delete_failed,
+        now,
+        reserve,
+    );
+
+    let name_of = |uuid: uuid::Uuid| {
+        backups
+            .iter()
+            .find(|b| b.uuid == uuid)
+            .map(|b| b.name.clone())
+            .unwrap_or_default()
+    };
+    let routine_name = |uuid: uuid::Uuid| {
+        ctx.routines
+            .iter()
+            .find(|r| r.uuid == uuid)
+            .map(|r| r.name.clone())
+            .unwrap_or_default()
     };
 
-    let backups = ManagedBackup::all_for_group(&state.database, policy.server_uuid, group_uuid).await?;
-    let names: std::collections::HashMap<_, _> =
-        backups.iter().map(|b| (b.uuid, b.name.clone())).collect();
-    let actions = retention::plan(&backups, policy, reserve_hourly);
-
     let mut deleted = 0;
-    for (uuid, action) in actions {
-        let name = names.get(&uuid).cloned().unwrap_or_default();
-
+    for (uuid, action) in &plan.actions {
         match action {
-            PlannedAction::Promote { from, to } => {
-                models::set_tier(&state.database, policy.server_uuid, uuid, to, true).await?;
+            PlannedAction::Move { from, to } => {
+                models::set_routine(&state.database, server_uuid, *uuid, Some(*to)).await?;
                 models::write_log(
                     &state.database,
-                    policy.server_uuid,
+                    server_uuid,
                     "info",
                     format!(
-                        "\"{name}\" von {} zu {} befördert",
-                        from.label(),
-                        to.label()
+                        "\"{}\" von \"{}\" nach \"{}\" übernommen",
+                        name_of(*uuid),
+                        routine_name(*from),
+                        routine_name(*to)
                     ),
                 )
                 .await;
             }
-            PlannedAction::Keep { tier } => {
-                // Fehlende Zuordnung (z.B. manuell in die Gruppe verschoben) nachtragen.
-                if backups.iter().any(|b| b.uuid == uuid && b.tier != tier) {
-                    models::set_tier(&state.database, policy.server_uuid, uuid, tier, false).await?;
-                }
-            }
             PlannedAction::Delete { reason } => {
-                match delete_backup(state, policy.server_uuid, uuid, &reason).await {
+                match delete_backup(state, server_uuid, *uuid, reason).await {
                     Ok(()) => {
                         deleted += 1;
                         models::write_log(
                             &state.database,
-                            policy.server_uuid,
+                            server_uuid,
                             "info",
-                            format!("\"{name}\" gelöscht ({reason})"),
+                            format!("\"{}\" gelöscht ({reason})", name_of(*uuid)),
                         )
                         .await;
                     }
                     Err(err) => {
                         models::write_log(
                             &state.database,
-                            policy.server_uuid,
+                            server_uuid,
                             "error",
-                            format!("\"{name}\" konnte nicht gelöscht werden: {err:#}"),
+                            format!("\"{}\" konnte nicht gelöscht werden: {err:#}", name_of(*uuid)),
                         )
                         .await;
                     }
                 }
             }
-            PlannedAction::Pinned | PlannedAction::Running | PlannedAction::FailedKept => {}
+            PlannedAction::Keep { .. }
+            | PlannedAction::Pinned
+            | PlannedAction::Running
+            | PlannedAction::FailedKept
+            | PlannedAction::Unassigned => {}
+        }
+    }
+
+    // Routinen, die ein Backup übernommen haben, sind bis zum nächsten Termin erledigt.
+    for routine in ctx.routines.iter_mut() {
+        if plan.received.contains(&routine.uuid) {
+            routine.last_run = Some(now);
+            routine.last_error = None;
+            routine.next_run = schedule::parse(&routine.cron)
+                .ok()
+                .and_then(|cron| schedule::next_after(&cron, ctx.timezone, now));
+            routine.save_run_state(&state.database).await?;
         }
     }
 

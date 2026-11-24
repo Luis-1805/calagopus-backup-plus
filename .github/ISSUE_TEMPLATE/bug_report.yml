@@ -1,0 +1,36 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: routines
+    attributes:
+      label: Routine setup
+      description: Which template or routines are configured (schedule, keep count, source)?
+  - type: textarea
+    id: log
+    attributes:
+      label: Log output
+      description: Relevant entries from the "Protokoll" section of the Auto-Backups tab, or from the panel log.
+      render: text
+  - type: input
+    id: panel-version
+    attributes:
+      label: Calagopus panel version
+      placeholder: e.g. 1.2.11
+    validations:
+      required: true
+  - type: input
+    id: extension-version
+    attributes:
+      label: Backup Plus version
+      placeholder: e.g. 2.0.0
+    validations:
+      required: true

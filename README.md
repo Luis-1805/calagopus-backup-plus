@@ -1,76 +1,180 @@
-# Backup Plus – Calagopus Extension
+<p align="center">
+  <img src=".github/assets/banner.svg" alt="Backup Plus – configurable, rotating server backups for the Calagopus panel" width="100%">
+</p>
 
-Automatische Server-Backups mit GFS-Rotation („Grandfather–Father–Son“) und automatischer Bereinigung.
+<p align="center">
+  <a href="https://github.com/Luis-1805/calagopus-backup-plus/releases/latest"><img src="https://img.shields.io/github/v/release/Luis-1805/calagopus-backup-plus?style=flat-square&label=release&color=38bdf8" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/Calagopus-%E2%89%A5%201.2.11-818cf8?style=flat-square" alt="Calagopus 1.2.11 or newer">
+  <img src="https://img.shields.io/badge/backend-Rust-a78bfa?style=flat-square&logo=rust&logoColor=white" alt="Rust backend">
+  <img src="https://img.shields.io/badge/frontend-React-f472b6?style=flat-square&logo=react&logoColor=white" alt="React frontend">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Luis-1805/calagopus-backup-plus?style=flat-square&color=4ade80" alt="MIT license"></a>
+</p>
 
-Paketname: `dev.backupplus.gfsbackups` · benötigt Calagopus Panel **>= 1.2.11** (heavy-Image oder Dev-Umgebung)
+<p align="center">
+  <b>Set up your backup strategy once — Backup Plus creates, rotates and cleans up your server backups for you.</b>
+</p>
 
-## Was sie macht
+---
 
-Standard-Richtlinie pro Server (frei anpassbar):
+## Why Backup Plus?
 
-| Stufe        | Anzahl | Bedeutung                                   |
-| ------------ | ------ | ------------------------------------------- |
-| Stündlich    | 3      | die Backups der letzten drei Stunden        |
-| Wöchentlich  | 1      | höchstens ~7 Tage alt, wird wöchentlich erneuert |
-| Monatlich    | 1      | höchstens ~30 Tage alt, wird monatlich erneuert  |
+The Calagopus panel can create backups, but keeping *the right ones* is up to you. Backup Plus turns backups into
+**routines**: you decide when backups are made, how many of each kind to keep and how long to keep them. Everything
+older is removed automatically, so you never run out of backup slots and never lose the backup you actually need.
 
-Ergebnis: **immer genau 5 Backups**, alle älteren werden automatisch gelöscht.
+A common setup, and the default template:
 
-So funktioniert die Rotation:
+> **Always exactly 5 backups:** the last 3 hours, one from this week and one from this month.
 
-1. Jede Stunde (Intervall und Minute einstellbar) entsteht ein neues Backup in der Stufe *stündlich*.
-2. Fällt ein Backup aus den 3 neuesten stündlichen heraus, wird geprüft, ob eine höhere Stufe fällig ist
-   (monatlich → wöchentlich → täglich). Wenn ja, wird es **befördert** statt gelöscht – es geht also kein
-   Backup verloren, das gebraucht wird.
-3. Jede Stufe wird auf ihre Höchstanzahl gekürzt; das jeweils älteste fliegt raus.
+## How rotation works
 
-> Tipp: Mit „Wöchentlich behalten = 2“ hast du immer mindestens ein Backup, das älter als eine Woche ist.
+<p align="center">
+  <img src=".github/assets/rotation.svg" alt="The oldest hourly backup is taken over by the weekly or monthly routine when it is due, otherwise it is deleted." width="100%">
+</p>
 
-## Zusätzliche Features
+Each routine keeps its newest backups. A routine of type **“take over”** doesn't create backups of its own: when a
+backup falls out of its source routine *and* the routine is due according to its schedule, it takes that backup over
+instead of letting it be deleted. That gives you weekly and monthly backups at no extra cost — and you can chain
+routines (hourly → daily → weekly → monthly).
 
-- **Server-Tab „Auto-Backups“** mit Status, nächstem/letztem Lauf, Speicherbelegung und Backup-Limit-Anzeige
-- **Vorschau**: Für jedes Backup wird angezeigt, was beim nächsten Lauf passiert (bleibt / wird befördert / wird gelöscht – inkl. Grund)
-- **Jetzt sichern**-Button (Rate-Limit: 3 pro Minute)
-- **Anpinnen**: angepinnte Backups (= im Panel gesperrt) werden nie automatisch gelöscht
-- **Stufe manuell ändern** (z. B. ein bestimmtes Backup als monatlich markieren)
-- **Tägliche Stufe** und beliebige Anzahlen pro Stufe
-- **Namensvorlage** mit Platzhaltern `{date}`, `{day}`, `{time}`, `{tier}`, `{server}`
-- **Ignorierte Dateien** pro Server (wie `.gitignore`)
-- **Fehlgeschlagene Backups** automatisch aufräumen (abschaltbar)
-- **Protokoll** pro Server + Einträge im normalen Aktivitätslog des Panels
-- **Schutzmechanismen**: überspringt gesperrte, installierende, wiederherstellende und übertragene Server; startet kein neues Backup, solange das vorherige noch läuft; nutzt dieselbe Sperre wie das Panel
-- **Eigene Backup-Gruppe** „Backup Plus (automatisch)“ – deine manuellen Backups werden **nie** angefasst
-- **Admin-Seite** (Extensions → Backup Plus → Konfigurieren): globaler Hauptschalter, minimales Intervall,
-  max. Backups pro Server, Lastverteilung (max. neue Backups pro Minute), Protokoll-Länge, Statistik
-- **Berechtigungen** für Subuser: `backup-plus.read`, `backup-plus.manage`
+## Features
 
-## Wichtig: Backup-Limit
+<table>
+<tr>
+<td width="50%" valign="top">
 
-Das Panel zählt alle Backups eines Servers gegen dessen **Backup-Limit**. Setze es für jeden Server auf mindestens
-die Summe der behaltenen Backups – bei der Standard-Richtlinie **5, empfohlen 6** (beim Erstellen existiert das
-neue Backup kurz zusätzlich, bis die Bereinigung ein paar Minuten später läuft). Ist das Limit genau 5, macht die
-Extension vor dem Erstellen selbst einen Platz frei. Manuelle Backups zählen ebenfalls mit.
+### 🗂️ Backup routines
+- Any number of routines per server
+- **Create** new backups or **take over** expiring ones
+- Cron schedule in the server's time zone, with presets, a plain-language preview and the next run time
+- Keep the newest *N*, optional maximum age
+- Name template (`{routine}`, `{date}`, `{day}`, `{time}`, `{server}`) and ignored files per routine
+- Pause, reorder or run a routine right now
+
+</td>
+<td width="50%" valign="top">
+
+### 🔍 Full visibility
+- See what happens to every backup on the next run: *stays*, *moves to routine X* or *will be deleted* (with reason)
+- Per-routine status: backup count, last and next run, last error
+- Run log per server, plus entries in the panel's activity log
+- Admin overview: servers, routines, managed backups and storage used
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🧩 Templates
+- Ships with four ready-made templates (see below)
+- Admins can create their own templates or copy a built-in one
+- Apply a template to a single server, or to **all servers at once** — optionally only to servers that aren't set up yet
+
+</td>
+<td valign="top">
+
+### 🛡️ Safe by design
+- Uses its own backup group — **manual backups are never touched**
+- **Pin** a backup and it is never deleted automatically
+- Backups of paused or removed routines are kept
+- Skips suspended, installing, restoring and transferring servers; never starts a backup while one is still running
+- Validates schedules, minimum interval, routine chains (no cycles) and the server's backup limit
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### ⚙️ Admin controls
+- Global on/off switch
+- Minimum interval between backups, max backups and routines per server
+- **Allow or forbid custom routines** — when forbidden, users can only apply templates
+- Default template for new servers
+- Load balancing for large panels (servers processed per minute)
+
+</td>
+<td valign="top">
+
+### 🔐 Permissions
+- `backup-plus.read` — view routines, backups and the log
+- `backup-plus.manage` — change routines, apply templates, run backups, pin backups
+- Admin pages use the panel's `extensions.read` / `extensions.manage`
+
+</td>
+</tr>
+</table>
+
+> [!NOTE]
+> The extension's interface inside the panel is currently in **German**.
+
+## Built-in templates
+
+| Template | Routines | Backups kept |
+| --- | --- | :---: |
+| **GFS compact** *(default)* | 3 × hourly → 1 × weekly (renewed every Monday) and 1 × monthly (renewed on the 1st) | **5** |
+| GFS extended | 24 × hourly → 7 × daily → 4 × weekly → 6 × monthly | 41 |
+| Daily, 7 days | every night at 04:00, keep 7 | 7 |
+| Every 6 hours, 2 days | every 6 hours, max. 48 hours old | 8 |
 
 ## Installation
 
-**Docker (heavy-Image):** Die Datei `dev_backupplus_gfsbackups.c7s.zip` unter [Releases](https://github.com/Luis-1805/calagopus-backup-plus/releases/latest) herunterladen und im Admin-Bereich unter *Extensions*
-hochladen – das Panel kompiliert und lädt sie (1–2 Minuten). Alternativ die Datei nach `./build/extensions/`
-kopieren und `docker compose restart web` ausführen.
+> [!IMPORTANT]
+> Installing extensions requires the Calagopus **`:heavy`** Docker image (or a development environment), because the
+> panel compiles extensions on install. See the
+> [Calagopus docs](https://calagopus.com/docs/panel/extensions/installing-extensions).
 
-**Dev-Umgebung:**
+**Docker (`:heavy` image)**
+
+1. Download `dev_backupplus_gfsbackups.c7s.zip` from the [latest release](https://github.com/Luis-1805/calagopus-backup-plus/releases/latest).
+2. In the panel, go to **Admin → Extensions** and upload the file. The panel builds and loads it (usually 1–2 minutes).
+
+**Development environment**
 
 ```bash
 panel-rs extensions add dev_backupplus_gfsbackups.c7s.zip
 panel-rs extensions apply --profile balanced
 ```
 
-Danach am Server den Tab **Auto-Backups** öffnen, Richtlinie prüfen, „Automatische Backups aktivieren“ einschalten
-und speichern. Das erste Backup entsteht innerhalb einer Minute.
+## Getting started
 
-## Technisches
+1. Make sure the server's **backup limit** is at least the total number of backups your routines keep — ideally one
+   more, because a new backup briefly exists alongside the others until the next rotation a few minutes later.
+2. Open the server and go to the new **Auto-Backups** tab.
+3. Pick a template and click **Apply template** — or build your own routines and click **Save**.
 
-- Backend: Rust, Cron-Task jede Minute (`backup_plus_tick`, nur auf der Primär-Instanz)
-- Nutzt die Panel-internen Modelle (`ServerBackup::create`, `delete`, `ServerBackupGroup`) – funktioniert also mit
-  jedem Backup-Speicher (Local, S3, Restic, Kopia, …)
-- Eigene Tabellen: `backup_plus_policies`, `backup_plus_backups`, `backup_plus_log`
-- Zeiten im Backend in UTC; die „Minute“ bezieht sich auf die volle UTC-Stunde
+That's it. The first backup is created within a minute, and from then on everything runs on its own.
+
+> [!TIP]
+> Want a weekly backup that is always *at least* a week old? Set the weekly routine to keep **2**.
+
+## Upgrading from 1.x
+
+Version 2 replaces the fixed hourly/daily/weekly/monthly tiers with free-form routines. Your existing settings are
+migrated automatically into equivalent routines, and existing backups keep their assignment — no action needed.
+
+## Development
+
+- **Backend:** Rust. A cron task (`backup_plus_tick`) runs every minute on the primary instance and uses the panel's own
+  models (`ServerBackup::create` / `delete`, `ServerBackupGroup`), so it works with every backup storage driver
+  (local, S3, restic, Kopia, …).
+- **Frontend:** React + Mantine, mounted as a server route and an admin configuration page.
+- **Database tables:** `backup_plus_policies`, `backup_plus_routines`, `backup_plus_backups`, `backup_plus_log`.
+- **Tests:** `cargo test -p dev_backupplus_gfsbackups` — includes a 90-day simulation of the default template with real
+  cron schedules and time zones.
+
+Project layout (the same as inside the `.c7s.zip`):
+
+```text
+backend/       Rust crate (routes, background task, rotation logic)
+frontend/      React UI (server tab, admin page)
+migrations/    SQL migrations
+Metadata.toml  Extension metadata
+```
+
+## Contributing
+
+Bug reports and ideas are welcome — please [open an issue](https://github.com/Luis-1805/calagopus-backup-plus/issues/new/choose).
+
+## License
+
+[MIT](LICENSE)

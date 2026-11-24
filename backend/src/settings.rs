@@ -1,3 +1,4 @@
+use crate::templates::{DEFAULT_TEMPLATE_ID, Template};
 use compact_str::ToCompactString;
 use serde::{Deserialize, Serialize};
 use shared::extensions::settings::{
@@ -11,14 +12,22 @@ use utoipa::ToSchema;
 pub struct ExtensionSettingsData {
     /// Hauptschalter: wenn `false`, erstellt und löscht die Extension nichts.
     pub enabled: bool,
-    /// Kleinstes erlaubtes Intervall (Stunden) zwischen zwei automatischen Backups.
+    /// Kleinster erlaubter Abstand (Stunden) zwischen zwei neu erstellten Backups einer Routine.
     pub min_interval_hours: u32,
-    /// Maximale Gesamtzahl an Backups, die eine Richtlinie behalten darf.
+    /// Maximale Gesamtzahl an Backups, die alle Routinen eines Servers behalten dürfen.
     pub max_keep_total: u32,
-    /// Wie viele Server pro Minute höchstens ein neues Backup bekommen (Lastverteilung).
+    /// Maximale Anzahl Routinen pro Server.
+    pub max_routines: u32,
+    /// Dürfen Server-Nutzer eigene Routinen anlegen? Sonst nur Vorlagen anwenden.
+    pub allow_custom_routines: bool,
+    /// Vorlage, die für noch nicht eingerichtete Server vorgeschlagen wird.
+    pub default_template_id: String,
+    /// Wie viele Server pro Minute höchstens bearbeitet werden (Lastverteilung).
     pub max_backups_per_tick: u32,
     /// Wie viele Protokolleinträge pro Server aufgehoben werden.
     pub log_retention: u32,
+    /// Eigene Vorlagen des Admins (zusätzlich zu den eingebauten).
+    pub templates: Vec<Template>,
 }
 
 impl Default for ExtensionSettingsData {
@@ -26,9 +35,13 @@ impl Default for ExtensionSettingsData {
         Self {
             enabled: true,
             min_interval_hours: 1,
-            max_keep_total: 24,
+            max_keep_total: 50,
+            max_routines: 10,
+            allow_custom_routines: true,
+            default_template_id: DEFAULT_TEMPLATE_ID.into(),
             max_backups_per_tick: 10,
             log_retention: 100,
+            templates: Vec::new(),
         }
     }
 }
@@ -46,11 +59,21 @@ impl SettingsSerializeExt for ExtensionSettingsData {
                 self.min_interval_hours.to_compact_string(),
             )
             .write_raw_setting("max_keep_total", self.max_keep_total.to_compact_string())
+            .write_raw_setting("max_routines", self.max_routines.to_compact_string())
+            .write_raw_setting(
+                "allow_custom_routines",
+                self.allow_custom_routines.to_compact_string(),
+            )
+            .write_raw_setting(
+                "default_template_id",
+                self.default_template_id.to_compact_string(),
+            )
             .write_raw_setting(
                 "max_backups_per_tick",
                 self.max_backups_per_tick.to_compact_string(),
             )
-            .write_raw_setting("log_retention", self.log_retention.to_compact_string()))
+            .write_raw_setting("log_retention", self.log_retention.to_compact_string())
+            .write_serde_setting("templates", &self.templates)?)
     }
 }
 
@@ -79,6 +102,19 @@ impl SettingsDeserializeExt for ExtensionSettingsDataDeserializer {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(defaults.max_keep_total)
                 .max(1),
+            max_routines: deserializer
+                .take_raw_setting("max_routines")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(defaults.max_routines)
+                .max(1),
+            allow_custom_routines: deserializer
+                .take_raw_setting("allow_custom_routines")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(defaults.allow_custom_routines),
+            default_template_id: deserializer
+                .take_raw_setting("default_template_id")
+                .map(|s| s.to_string())
+                .unwrap_or(defaults.default_template_id),
             max_backups_per_tick: deserializer
                 .take_raw_setting("max_backups_per_tick")
                 .and_then(|s| s.parse().ok())
@@ -89,6 +125,9 @@ impl SettingsDeserializeExt for ExtensionSettingsDataDeserializer {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(defaults.log_retention)
                 .max(10),
+            templates: deserializer
+                .read_serde_setting("templates")
+                .unwrap_or_default(),
         }))
     }
 }
@@ -107,5 +146,15 @@ pub async fn load(state: &shared::State) -> ExtensionSettingsData {
             tracing::warn!("backup-plus: Einstellungen konnten nicht geladen werden: {err:#?}");
             ExtensionSettingsData::default()
         }
+    }
+}
+
+impl ExtensionSettingsData {
+    pub fn all_templates(&self) -> Vec<Template> {
+        crate::templates::all(&self.templates)
+    }
+
+    pub fn find_template(&self, id: &str) -> Option<Template> {
+        self.all_templates().into_iter().find(|t| t.id == id)
     }
 }

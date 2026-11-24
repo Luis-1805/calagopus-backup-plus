@@ -1,29 +1,49 @@
-//! Reine Rotations-Logik (GFS – Grandfather/Father/Son), ohne Datenbank- oder Netzwerkzugriff.
+//! Reine Rotations-Logik, ohne Datenbank- oder Netzwerkzugriff.
 //!
-//! Jedes neue automatische Backup startet in der Stufe "stündlich". Fällt es aus den
-//! `keep_hourly` neuesten stündlichen Backups heraus, wird geprüft, ob eine höhere Stufe
-//! "fällig" ist (monatlich vor wöchentlich vor täglich). Ist das der Fall, wird das Backup
-//! dorthin befördert statt gelöscht. Danach wird jede Stufe auf ihre Höchstanzahl gekürzt.
-//!
-//! Mit der Standard-Richtlinie (3 stündlich, 1 wöchentlich, 1 monatlich) liegen so immer
-//! genau 5 Backups vor: die drei der letzten drei Stunden, ein wöchentliches und ein
-//! monatliches. Alles Ältere wird gelöscht.
+//! Jede Routine behält höchstens `keep` Backups (und optional keine, die älter als
+//! `max_age` sind). Fällt ein Backup aus einer Routine heraus, wird geprüft, ob eine
+//! Routine mit der Quelle "Übernehmen von <dieser Routine>" gerade fällig ist. Ist das der
+//! Fall, wechselt das Backup dorthin, statt gelöscht zu werden. So lassen sich z. B.
+//! "3 stündliche + 1 wöchentliches + 1 monatliches" Backups abbilden, ohne zusätzliche
+//! Backups zu erzeugen. Ketten sind möglich (stündlich → täglich → wöchentlich …).
 
-use crate::models::{ManagedBackup, Policy, Tier};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use utoipa::ToSchema;
 
-/// Toleranz, damit leicht verspätete Läufe eine Stufe nicht um eine Periode verschieben.
-const TOLERANCE_MINUTES: i64 = 15;
+/// Was die Planung über eine Routine wissen muss.
+#[derive(Clone, Debug)]
+pub struct RoutineSpec {
+    pub uuid: uuid::Uuid,
+    pub name: String,
+    pub enabled: bool,
+    pub position: i32,
+    pub keep: i32,
+    pub max_age: Option<chrono::Duration>,
+    /// Quelle, falls die Routine Backups aus einer anderen Routine übernimmt.
+    pub promote_from: Option<uuid::Uuid>,
+    /// Ob die Routine laut Zeitplan gerade an der Reihe ist.
+    pub due: bool,
+}
+
+/// Was die Planung über ein Backup wissen muss.
+#[derive(Clone, Debug)]
+pub struct BackupSpec {
+    pub uuid: uuid::Uuid,
+    pub routine: Option<uuid::Uuid>,
+    pub created: chrono::NaiveDateTime,
+    pub completed: bool,
+    pub successful: bool,
+    pub locked: bool,
+}
 
 #[derive(ToSchema, Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum PlannedAction {
-    /// Backup bleibt in seiner Stufe.
-    Keep { tier: Tier },
-    /// Backup wird in eine höhere Stufe befördert.
-    Promote { from: Tier, to: Tier },
+    /// Backup bleibt in seiner Routine.
+    Keep { routine: uuid::Uuid },
+    /// Backup wechselt in eine andere Routine.
+    Move { from: uuid::Uuid, to: uuid::Uuid },
     /// Backup wird gelöscht.
     Delete { reason: String },
     /// Backup ist angepinnt (gesperrt) und wird nie automatisch gelöscht.
@@ -32,245 +52,359 @@ pub enum PlannedAction {
     Running,
     /// Fehlgeschlagenes Backup, das behalten wird (Löschen deaktiviert).
     FailedKept,
+    /// Backup gehört zu keiner (aktiven) Routine und wird nicht angefasst.
+    Unassigned,
 }
 
-/// Berechnet für jedes Backup der Gruppe die nächste Aktion.
-///
-/// `reserve_hourly` reserviert stündliche Plätze für ein Backup, das gleich erstellt wird
-/// (nur nötig, wenn das Backup-Limit des Servers sonst überschritten würde).
-pub fn plan(
-    backups: &[ManagedBackup],
-    policy: &Policy,
-    reserve_hourly: i32,
-) -> Vec<(uuid::Uuid, PlannedAction)> {
-    let mut actions: Vec<(uuid::Uuid, PlannedAction)> = Vec::with_capacity(backups.len());
+#[derive(Debug, Default)]
+pub struct Plan {
+    pub actions: Vec<(uuid::Uuid, PlannedAction)>,
+    /// Routinen, die in diesem Durchlauf ein Backup übernommen haben.
+    pub received: Vec<uuid::Uuid>,
+}
 
-    // Stufen-Listen mit (uuid, created), jeweils neueste zuerst.
-    let mut tiers: HashMap<Tier, Vec<(uuid::Uuid, chrono::NaiveDateTime)>> = HashMap::new();
-    let mut original_tier: HashMap<uuid::Uuid, Tier> = HashMap::new();
+impl Plan {
+    pub fn action_for(&self, uuid: uuid::Uuid) -> Option<&PlannedAction> {
+        self.actions.iter().find(|(u, _)| *u == uuid).map(|(_, a)| a)
+    }
+}
 
-    let mut sorted: Vec<&ManagedBackup> = backups.iter().collect();
-    sorted.sort_by(|a, b| b.created.cmp(&a.created).then(b.uuid.cmp(&a.uuid)));
+/// Sortiert Routinen so, dass Quellen vor den Routinen kommen, die von ihnen übernehmen.
+fn processing_order(routines: &[RoutineSpec]) -> Vec<&RoutineSpec> {
+    let by_uuid: HashMap<uuid::Uuid, &RoutineSpec> = routines.iter().map(|r| (r.uuid, r)).collect();
 
-    for backup in &sorted {
-        if backup.completed.is_none() {
-            actions.push((backup.uuid, PlannedAction::Running));
-            continue;
-        }
-
-        if !backup.successful {
-            if backup.locked {
-                actions.push((backup.uuid, PlannedAction::Pinned));
-            } else if policy.delete_failed {
-                actions.push((
-                    backup.uuid,
-                    PlannedAction::Delete {
-                        reason: "Backup ist fehlgeschlagen".into(),
-                    },
-                ));
-            } else {
-                actions.push((backup.uuid, PlannedAction::FailedKept));
+    let depth = |routine: &RoutineSpec| {
+        let mut depth = 0;
+        let mut current = routine.promote_from;
+        while let Some(source) = current {
+            depth += 1;
+            if depth > routines.len() {
+                break; // Zyklus – wird bei der Validierung verhindert
             }
+            current = by_uuid.get(&source).and_then(|r| r.promote_from);
+        }
+        depth
+    };
+
+    let mut ordered: Vec<&RoutineSpec> = routines.iter().collect();
+    ordered.sort_by_key(|r| (depth(r), r.position));
+    ordered
+}
+
+/// Berechnet für jedes Backup die nächste Aktion.
+///
+/// `reserve` reserviert in der genannten Routine einen Platz für ein Backup, das gleich
+/// erstellt wird (nur nötig, wenn sonst das Backup-Limit des Servers überschritten würde).
+pub fn plan(
+    backups: &[BackupSpec],
+    routines: &[RoutineSpec],
+    delete_failed: bool,
+    now: chrono::NaiveDateTime,
+    reserve: Option<uuid::Uuid>,
+) -> Plan {
+    let mut plan = Plan::default();
+    let active: HashMap<uuid::Uuid, &RoutineSpec> = routines
+        .iter()
+        .filter(|r| r.enabled)
+        .map(|r| (r.uuid, r))
+        .collect();
+
+    // Aktive Backups je Routine, jeweils (uuid, created, ursprüngliche Routine).
+    let mut lists: HashMap<uuid::Uuid, Vec<(uuid::Uuid, chrono::NaiveDateTime, uuid::Uuid)>> =
+        HashMap::new();
+
+    for backup in backups {
+        if !backup.completed {
+            plan.actions.push((backup.uuid, PlannedAction::Running));
             continue;
         }
 
         if backup.locked {
-            actions.push((backup.uuid, PlannedAction::Pinned));
+            plan.actions.push((backup.uuid, PlannedAction::Pinned));
             continue;
         }
 
-        original_tier.insert(backup.uuid, backup.tier);
-        tiers
-            .entry(backup.tier)
-            .or_default()
-            .push((backup.uuid, backup.created));
+        if !backup.successful {
+            plan.actions.push((
+                backup.uuid,
+                if delete_failed {
+                    PlannedAction::Delete {
+                        reason: "Backup ist fehlgeschlagen".into(),
+                    }
+                } else {
+                    PlannedAction::FailedKept
+                },
+            ));
+            continue;
+        }
+
+        match backup.routine.filter(|r| active.contains_key(r)) {
+            Some(routine) => lists
+                .entry(routine)
+                .or_default()
+                .push((backup.uuid, backup.created, routine)),
+            None => plan.actions.push((backup.uuid, PlannedAction::Unassigned)),
+        }
     }
 
-    // 1. Stündliche Stufe: die neuesten N behalten, der Rest ist Kandidat für eine Beförderung.
-    let keep_hourly = (policy.keep(Tier::Hourly) - reserve_hourly.max(0)).max(0) as usize;
-    let hourly = tiers.remove(&Tier::Hourly).unwrap_or_default();
-    let (kept_hourly, expiring) = if hourly.len() > keep_hourly {
-        let (a, b) = hourly.split_at(keep_hourly);
-        (a.to_vec(), b.to_vec())
-    } else {
-        (hourly, Vec::new())
-    };
-    tiers.insert(Tier::Hourly, kept_hourly);
+    let mut received: HashSet<uuid::Uuid> = HashSet::new();
+    let ordered: Vec<&RoutineSpec> = processing_order(routines)
+        .into_iter()
+        .filter(|r| r.enabled)
+        .collect();
 
-    let mut promoted: HashMap<uuid::Uuid, Tier> = HashMap::new();
-    let mut deleted: HashMap<uuid::Uuid, String> = HashMap::new();
-    let tolerance = chrono::Duration::minutes(TOLERANCE_MINUTES);
+    for routine in &ordered {
+        let mut list = lists.remove(&routine.uuid).unwrap_or_default();
+        list.sort_by(|a, b| b.1.cmp(&a.1).then(b.0.cmp(&a.0)));
 
-    // Neueste zuerst: das frischeste auslaufende Backup wird bevorzugt befördert.
-    for (uuid, created) in expiring {
-        let target = [Tier::Monthly, Tier::Weekly, Tier::Daily]
-            .into_iter()
-            .find(|tier| {
-                if policy.keep(*tier) == 0 {
-                    return false;
-                }
+        let keep = (routine.keep - i32::from(reserve == Some(routine.uuid))).max(0) as usize;
 
-                match tiers.get(tier).and_then(|list| list.iter().map(|(_, c)| *c).max()) {
-                    None => true,
-                    Some(newest) => newest + tier.period() <= created + tolerance,
-                }
+        let mut kept = Vec::new();
+        let mut expiring = Vec::new();
+        for (index, item) in list.into_iter().enumerate() {
+            let too_old = routine.max_age.is_some_and(|max| now - item.1 > max);
+            if index < keep && !too_old {
+                kept.push(item);
+            } else {
+                expiring.push((item, too_old));
+            }
+        }
+
+        for item in kept {
+            plan.actions.push((
+                item.0,
+                if item.2 == routine.uuid {
+                    PlannedAction::Keep {
+                        routine: routine.uuid,
+                    }
+                } else {
+                    PlannedAction::Move {
+                        from: item.2,
+                        to: routine.uuid,
+                    }
+                },
+            ));
+        }
+
+        // Neueste zuerst: das frischeste auslaufende Backup wird bevorzugt übernommen.
+        for ((uuid, created, origin), too_old) in expiring {
+            let target = ordered.iter().find(|candidate| {
+                candidate.promote_from == Some(routine.uuid)
+                    && candidate.due
+                    && !received.contains(&candidate.uuid)
             });
 
-        match target {
-            Some(tier) => {
-                let list = tiers.entry(tier).or_default();
-                list.push((uuid, created));
-                list.sort_by(|a, b| b.1.cmp(&a.1).then(b.0.cmp(&a.0)));
-                promoted.insert(uuid, tier);
-            }
-            None => {
-                deleted.insert(
+            match target {
+                Some(target) => {
+                    received.insert(target.uuid);
+                    lists
+                        .entry(target.uuid)
+                        .or_default()
+                        .push((uuid, created, origin));
+                }
+                None => plan.actions.push((
                     uuid,
-                    format!(
-                        "älter als die {} neuesten stündlichen Backups",
-                        policy.keep(Tier::Hourly)
-                    ),
-                );
-            }
-        }
-    }
-
-    // 2. Jede höhere Stufe auf ihre Höchstanzahl kürzen.
-    for tier in [Tier::Daily, Tier::Weekly, Tier::Monthly] {
-        let keep = policy.keep(tier) as usize;
-        if let Some(list) = tiers.get_mut(&tier) {
-            list.sort_by(|a, b| b.1.cmp(&a.1).then(b.0.cmp(&a.0)));
-            if list.len() > keep {
-                for (uuid, _) in list.split_off(keep) {
-                    promoted.remove(&uuid);
-                    deleted.insert(
-                        uuid,
-                        if keep == 0 {
-                            format!("Stufe \"{}\" ist deaktiviert", tier.label())
+                    PlannedAction::Delete {
+                        reason: if too_old {
+                            format!("älter als das Höchstalter der Routine \"{}\"", routine.name)
                         } else {
                             format!(
-                                "ersetzt durch ein neueres {} Backup",
-                                tier.label().to_lowercase()
+                                "älter als die {} neuesten Backups der Routine \"{}\"",
+                                routine.keep, routine.name
                             )
                         },
-                    );
-                }
-            }
-        }
-    }
-
-    // 3. Ergebnis zusammensetzen.
-    for (tier, list) in &tiers {
-        for (uuid, _) in list {
-            let from = original_tier.get(uuid).copied().unwrap_or(Tier::Hourly);
-            match promoted.get(uuid) {
-                Some(to) if *to != from => actions.push((
-                    *uuid,
-                    PlannedAction::Promote {
-                        from,
-                        to: *to,
                     },
                 )),
-                _ => actions.push((*uuid, PlannedAction::Keep { tier: *tier })),
             }
         }
     }
-    for (uuid, reason) in deleted {
-        actions.push((uuid, PlannedAction::Delete { reason }));
+
+    // Übrig gebliebene Einträge gehören zu Routinen, die nicht verarbeitet wurden.
+    for (_, list) in lists {
+        for (uuid, _, _) in list {
+            plan.actions.push((uuid, PlannedAction::Unassigned));
+        }
     }
 
-    actions
+    plan.received = received.into_iter().collect();
+    plan
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn backup(hours_ago: i64, tier: Tier) -> ManagedBackup {
-        static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    fn id(n: u128) -> uuid::Uuid {
+        uuid::Uuid::from_u128(n)
+    }
 
-        let now = chrono::NaiveDate::from_ymd_opt(2026, 11, 24)
+    fn base() -> chrono::NaiveDateTime {
+        chrono::NaiveDate::from_ymd_opt(2026, 11, 24)
             .unwrap()
             .and_hms_opt(12, 0, 0)
-            .unwrap();
-        let created = now - chrono::Duration::hours(hours_ago);
-        ManagedBackup {
-            uuid: uuid::Uuid::from_u128(
-                NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as u128,
-            ),
-            name: format!("b-{hours_ago}"),
-            tier,
+            .unwrap()
+    }
+
+    fn backup(n: u128, hours_ago: i64, routine: uuid::Uuid) -> BackupSpec {
+        BackupSpec {
+            uuid: id(n),
+            routine: Some(routine),
+            created: base() - chrono::Duration::hours(hours_ago),
+            completed: true,
             successful: true,
             locked: false,
-            bytes: 1,
-            completed: Some(created + chrono::Duration::minutes(2)),
-            created,
         }
     }
 
-    fn count(actions: &[(uuid::Uuid, PlannedAction)], pred: impl Fn(&PlannedAction) -> bool) -> usize {
-        actions.iter().filter(|(_, a)| pred(a)).count()
+    /// Die Vorlage "3 stündlich + 1 wöchentlich + 1 monatlich".
+    fn gfs(weekly_due: bool, monthly_due: bool) -> Vec<RoutineSpec> {
+        vec![
+            RoutineSpec {
+                uuid: id(1),
+                name: "Stündlich".into(),
+                enabled: true,
+                position: 0,
+                keep: 3,
+                max_age: None,
+                promote_from: None,
+                due: false,
+            },
+            RoutineSpec {
+                uuid: id(2),
+                name: "Wöchentlich".into(),
+                enabled: true,
+                position: 1,
+                keep: 1,
+                max_age: None,
+                promote_from: Some(id(1)),
+                due: weekly_due,
+            },
+            RoutineSpec {
+                uuid: id(3),
+                name: "Monatlich".into(),
+                enabled: true,
+                position: 2,
+                keep: 1,
+                max_age: None,
+                promote_from: Some(id(1)),
+                due: monthly_due,
+            },
+        ]
+    }
+
+    fn count(plan: &Plan, pred: impl Fn(&PlannedAction) -> bool) -> usize {
+        plan.actions.iter().filter(|(_, a)| pred(a)).count()
     }
 
     #[test]
-    fn first_expiring_backups_get_promoted_to_monthly_then_weekly() {
-        let policy = Policy::default_for(uuid::Uuid::nil());
-        let backups: Vec<_> = (0..5).map(|h| backup(h, Tier::Hourly)).collect();
-        let actions = plan(&backups, &policy, 0);
+    fn expiring_hourly_backups_fill_due_routines() {
+        let backups: Vec<_> = (0..5).map(|h| backup(100 + h as u128, h, id(1))).collect();
+        let plan = plan(&backups, &gfs(true, true), true, base(), None);
 
-        assert_eq!(count(&actions, |a| matches!(a, PlannedAction::Keep { tier: Tier::Hourly })), 3);
-        assert_eq!(count(&actions, |a| matches!(a, PlannedAction::Promote { to: Tier::Monthly, .. })), 1);
-        assert_eq!(count(&actions, |a| matches!(a, PlannedAction::Promote { to: Tier::Weekly, .. })), 1);
-        assert_eq!(count(&actions, |a| matches!(a, PlannedAction::Delete { .. })), 0);
+        assert_eq!(count(&plan, |a| matches!(a, PlannedAction::Keep { .. })), 3);
+        assert_eq!(count(&plan, |a| matches!(a, PlannedAction::Move { to, .. } if *to == id(2))), 1);
+        assert_eq!(count(&plan, |a| matches!(a, PlannedAction::Move { to, .. } if *to == id(3))), 1);
+        assert_eq!(count(&plan, |a| matches!(a, PlannedAction::Delete { .. })), 0);
+        assert_eq!(plan.received.len(), 2);
     }
 
     #[test]
-    fn steady_state_keeps_exactly_five() {
-        let policy = Policy::default_for(uuid::Uuid::nil());
-        let mut backups: Vec<_> = (0..4).map(|h| backup(h, Tier::Hourly)).collect();
-        backups.push(backup(48, Tier::Weekly));
-        backups.push(backup(24 * 10, Tier::Monthly));
-        let actions = plan(&backups, &policy, 0);
+    fn not_due_means_delete() {
+        let mut backups: Vec<_> = (0..4).map(|h| backup(100 + h as u128, h, id(1))).collect();
+        backups.push(backup(200, 48, id(2)));
+        backups.push(backup(300, 240, id(3)));
+        let plan = plan(&backups, &gfs(false, false), true, base(), None);
 
-        let kept = count(&actions, |a| matches!(a, PlannedAction::Keep { .. } | PlannedAction::Promote { .. }));
-        assert_eq!(kept, 5);
-        assert_eq!(count(&actions, |a| matches!(a, PlannedAction::Delete { .. })), 1);
+        assert_eq!(count(&plan, |a| matches!(a, PlannedAction::Keep { .. })), 5);
+        assert_eq!(plan.action_for(id(103)), Some(&PlannedAction::Delete {
+            reason: "älter als die 3 neuesten Backups der Routine \"Stündlich\"".into()
+        }));
     }
 
     #[test]
-    fn weekly_rotates_after_seven_days() {
-        let policy = Policy::default_for(uuid::Uuid::nil());
-        let mut backups: Vec<_> = (0..4).map(|h| backup(h, Tier::Hourly)).collect();
-        let old_weekly = backup(24 * 7 + 5, Tier::Weekly);
-        let old_weekly_uuid = old_weekly.uuid;
-        backups.push(old_weekly);
-        backups.push(backup(24 * 10, Tier::Monthly));
-        let actions = plan(&backups, &policy, 0);
+    fn due_weekly_replaces_old_weekly() {
+        let mut backups: Vec<_> = (0..4).map(|h| backup(100 + h as u128, h, id(1))).collect();
+        backups.push(backup(200, 24 * 7 + 3, id(2)));
+        backups.push(backup(300, 240, id(3)));
+        let plan = plan(&backups, &gfs(true, false), true, base(), None);
 
-        assert_eq!(count(&actions, |a| matches!(a, PlannedAction::Promote { to: Tier::Weekly, .. })), 1);
-        assert!(actions.iter().any(|(u, a)| *u == old_weekly_uuid && matches!(a, PlannedAction::Delete { .. })));
+        assert_eq!(plan.action_for(id(103)), Some(&PlannedAction::Move { from: id(1), to: id(2) }));
+        assert!(matches!(plan.action_for(id(200)), Some(PlannedAction::Delete { .. })));
+        assert_eq!(plan.received, vec![id(2)]);
     }
 
     #[test]
-    fn pinned_and_running_are_never_deleted() {
-        let policy = Policy::default_for(uuid::Uuid::nil());
-        let mut backups: Vec<_> = (0..10).map(|h| backup(h, Tier::Hourly)).collect();
-        backups[9].locked = true;
-        backups[8].completed = None;
-        let actions = plan(&backups, &policy, 0);
+    fn chains_promote_further() {
+        // stündlich(2) → täglich(1) → wöchentlich(1)
+        let routines = vec![
+            RoutineSpec { uuid: id(1), name: "S".into(), enabled: true, position: 0, keep: 2, max_age: None, promote_from: None, due: false },
+            RoutineSpec { uuid: id(2), name: "T".into(), enabled: true, position: 1, keep: 1, max_age: None, promote_from: Some(id(1)), due: true },
+            RoutineSpec { uuid: id(3), name: "W".into(), enabled: true, position: 2, keep: 1, max_age: None, promote_from: Some(id(2)), due: true },
+        ];
+        let backups = vec![
+            backup(10, 0, id(1)),
+            backup(11, 1, id(1)),
+            backup(12, 2, id(1)),
+            backup(20, 30, id(2)),
+        ];
+        let plan = plan(&backups, &routines, true, base(), None);
 
-        assert_eq!(count(&actions, |a| matches!(a, PlannedAction::Pinned)), 1);
-        assert_eq!(count(&actions, |a| matches!(a, PlannedAction::Running)), 1);
+        assert_eq!(plan.action_for(id(12)), Some(&PlannedAction::Move { from: id(1), to: id(2) }));
+        assert_eq!(plan.action_for(id(20)), Some(&PlannedAction::Move { from: id(2), to: id(3) }));
+        assert_eq!(count(&plan, |a| matches!(a, PlannedAction::Delete { .. })), 0);
     }
 
     #[test]
-    fn reserve_frees_one_hourly_slot() {
-        let mut policy = Policy::default_for(uuid::Uuid::nil());
-        policy.keep_weekly = 0;
-        policy.keep_monthly = 0;
-        let backups: Vec<_> = (0..3).map(|h| backup(h, Tier::Hourly)).collect();
-        let actions = plan(&backups, &policy, 1);
+    fn max_age_deletes_old_backups() {
+        let routines = vec![RoutineSpec {
+            uuid: id(1),
+            name: "Täglich".into(),
+            enabled: true,
+            position: 0,
+            keep: 10,
+            max_age: Some(chrono::Duration::days(2)),
+            promote_from: None,
+            due: false,
+        }];
+        let backups = vec![backup(1, 24, id(1)), backup(2, 72, id(1))];
+        let plan = plan(&backups, &routines, true, base(), None);
 
-        assert_eq!(count(&actions, |a| matches!(a, PlannedAction::Delete { .. })), 1);
+        assert!(matches!(plan.action_for(id(1)), Some(PlannedAction::Keep { .. })));
+        assert!(matches!(plan.action_for(id(2)), Some(PlannedAction::Delete { .. })));
+    }
+
+    #[test]
+    fn pinned_running_failed_and_unassigned() {
+        let mut backups: Vec<_> = (0..6).map(|h| backup(100 + h as u128, h, id(1))).collect();
+        backups[5].locked = true;
+        backups[4].completed = false;
+        backups[3].successful = false;
+        backups.push(BackupSpec { routine: None, ..backup(900, 50, id(1)) });
+        backups.push(backup(901, 50, id(99))); // gelöschte Routine
+        let plan = plan(&backups, &gfs(false, false), true, base(), None);
+
+        assert_eq!(plan.action_for(id(105)), Some(&PlannedAction::Pinned));
+        assert_eq!(plan.action_for(id(104)), Some(&PlannedAction::Running));
+        assert!(matches!(plan.action_for(id(103)), Some(PlannedAction::Delete { .. })));
+        assert_eq!(plan.action_for(id(900)), Some(&PlannedAction::Unassigned));
+        assert_eq!(plan.action_for(id(901)), Some(&PlannedAction::Unassigned));
+    }
+
+    #[test]
+    fn disabled_routine_keeps_its_backups() {
+        let mut routines = gfs(false, false);
+        routines[0].enabled = false;
+        let backups: Vec<_> = (0..6).map(|h| backup(100 + h as u128, h, id(1))).collect();
+        let plan = plan(&backups, &routines, true, base(), None);
+
+        assert_eq!(count(&plan, |a| matches!(a, PlannedAction::Unassigned)), 6);
+    }
+
+    #[test]
+    fn reserve_frees_one_slot() {
+        let backups: Vec<_> = (0..3).map(|h| backup(100 + h as u128, h, id(1))).collect();
+        let plan = plan(&backups, &gfs(false, false), true, base(), Some(id(1)));
+
+        assert_eq!(count(&plan, |a| matches!(a, PlannedAction::Delete { .. })), 1);
     }
 }

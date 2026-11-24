@@ -16,7 +16,7 @@ export default function CardSummary() {
 
   return (
     <Text size='sm' c='dimmed'>
-      {overview.policiesEnabled} aktive Richtlinien · {overview.managedBackups} Backups
+      {overview.policiesEnabled} aktive Server · {overview.routinesTotal} Routinen · {overview.managedBackups} Backups
       {overview.policiesWithErrors > 0 ? ` · ${overview.policiesWithErrors} mit Fehlern` : ''}
     </Text>
   );

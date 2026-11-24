@@ -12,8 +12,13 @@ use std::{str::FromStr, sync::Arc};
 mod engine;
 mod models;
 mod retention;
+mod schedule;
+mod templates;
+mod validation;
 mod routes;
 mod settings;
+#[cfg(test)]
+mod simulation_tests;
 
 pub const PACKAGE_NAME: &str = "dev.backupplus.gfsbackups";
 

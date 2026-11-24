@@ -1,101 +1,64 @@
 import {
   faBolt,
-  faCalendarDays,
   faClockRotateLeft,
   faEllipsisVertical,
+  faGear,
+  faLayerGroup,
   faListUl,
   faRotate,
   faThumbtack,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { ActionIcon, Alert, Badge, Group, Loader, Menu, SimpleGrid, Stack, Table, Text, Tooltip } from '@mantine/core';
-import { useForm } from '@mantine/form';
-import { zod4Resolver } from 'mantine-form-zod-resolver';
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Group,
+  Loader,
+  Menu,
+  Select,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Tooltip,
+} from '@mantine/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { httpErrorToHuman } from '@/api/axios.ts';
 import { ServerCan } from '@/elements/Can.tsx';
 import Button from '@/elements/buttons/Button.tsx';
 import ServerContentContainer from '@/elements/containers/ServerContentContainer.tsx';
 import TitleCard from '@/elements/data-display/TitleCard.tsx';
-import NumberInput from '@/elements/input/NumberInput.tsx';
 import Switch from '@/elements/input/Switch.tsx';
-import TextArea from '@/elements/input/TextArea.tsx';
-import TextInput from '@/elements/input/TextInput.tsx';
 import { useToast } from '@/providers/ToastProvider.tsx';
 import { useServerStore } from '@/stores/server.ts';
-import { getOverview, runNow, setPinned, setTier, updatePolicy } from './api.ts';
+import { applyTemplate, getOverview, runNow, setBackupRoutine, setPinned, updateConfig } from './api.ts';
+import RoutineListEditor, { cleanRoutines, routineColor } from './components/RoutineListEditor.tsx';
 import {
   formatBytes,
   formatDate,
   type ManagedBackup,
   type Overview,
   type PlannedAction,
-  type PolicyUpdate,
-  policyUpdateSchema,
-  type Tier,
-  tierColors,
-  tierLabels,
+  type RoutineInput,
 } from './lib/schemas.ts';
 
 const REFRESH_MS = 30_000;
 
-function PlannedActionBadge({ action }: { action: PlannedAction }) {
-  switch (action.type) {
-    case 'keep':
-      return (
-        <Badge color='green' variant='light'>
-          Bleibt
-        </Badge>
-      );
-    case 'promote':
-      return (
-        <Badge color={tierColors[action.to]} variant='light'>
-          Wird {tierLabels[action.to].toLowerCase()}
-        </Badge>
-      );
-    case 'delete':
-      return (
-        <Tooltip label={action.reason}>
-          <Badge color='red' variant='light'>
-            Wird gelöscht
-          </Badge>
-        </Tooltip>
-      );
-    case 'pinned':
-      return (
-        <Badge color='yellow' variant='light' leftSection={<FontAwesomeIcon icon={faThumbtack} />}>
-          Angepinnt
-        </Badge>
-      );
-    case 'running':
-      return (
-        <Badge color='gray' variant='light' leftSection={<Loader size={10} />}>
-          Läuft
-        </Badge>
-      );
-    case 'failed_kept':
-      return (
-        <Badge color='red' variant='outline'>
-          Fehlgeschlagen
-        </Badge>
-      );
-  }
-}
-
-function toForm(overview: Overview): PolicyUpdate {
-  const p = overview.policy;
-  return {
-    enabled: p.enabled,
-    intervalHours: p.intervalHours,
-    minuteOffset: p.minuteOffset,
-    keepHourly: p.keepHourly,
-    keepDaily: p.keepDaily,
-    keepWeekly: p.keepWeekly,
-    keepMonthly: p.keepMonthly,
-    nameTemplate: p.nameTemplate,
-    ignoredFiles: p.ignoredFiles,
-    deleteFailed: p.deleteFailed,
-  };
+function toInputs(overview: Overview): RoutineInput[] {
+  return overview.routines.map((r) => ({
+    key: r.uuid,
+    uuid: r.uuid,
+    name: r.name,
+    enabled: r.enabled,
+    cron: r.cron,
+    source: r.source,
+    sourceKey: r.sourceRoutineUuid,
+    keepCount: r.keepCount,
+    maxAgeHours: r.maxAgeHours,
+    nameTemplate: r.nameTemplate,
+    ignoredFiles: r.ignoredFiles,
+  }));
 }
 
 export default function ServerPage() {
@@ -103,40 +66,24 @@ export default function ServerPage() {
   const { addToast } = useToast();
 
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [routines, setRoutines] = useState<RoutineInput[]>([]);
+  const [enabled, setEnabled] = useState(false);
+  const [deleteFailed, setDeleteFailed] = useState(true);
+  const [dirty, setDirty] = useState(false);
+  const [templateId, setTemplateId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [running, setRunning] = useState(false);
-  const [ignoredText, setIgnoredText] = useState('');
+  const [running, setRunning] = useState<string | null>(null);
 
-  const form = useForm<PolicyUpdate>({
-    initialValues: {
-      enabled: false,
-      intervalHours: 1,
-      minuteOffset: 0,
-      keepHourly: 3,
-      keepDaily: 0,
-      keepWeekly: 1,
-      keepMonthly: 1,
-      nameTemplate: 'Auto {tier} {date}',
-      ignoredFiles: [],
-      deleteFailed: true,
-    },
-    validateInputOnBlur: true,
-    validate: zod4Resolver(policyUpdateSchema),
-  });
-
-  const applyOverview = useCallback(
-    (data: Overview, resetForm: boolean) => {
-      setOverview(data);
-      if (resetForm) {
-        const values = toForm(data);
-        form.setValues(values);
-        form.resetDirty(values);
-        setIgnoredText(values.ignoredFiles.join('\n'));
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  const applyOverview = useCallback((data: Overview, resetForm: boolean) => {
+    setOverview(data);
+    if (resetForm) {
+      setRoutines(toInputs(data));
+      setEnabled(data.policy.enabled);
+      setDeleteFailed(data.policy.deleteFailed);
+      setTemplateId((current) => current ?? data.defaultTemplateId);
+      setDirty(false);
+    }
+  }, []);
 
   const load = useCallback(
     (resetForm: boolean) => {
@@ -153,51 +100,56 @@ export default function ServerPage() {
     return () => clearInterval(timer);
   }, [load]);
 
-  const keepTotal = form.values.keepHourly + form.values.keepDaily + form.values.keepWeekly + form.values.keepMonthly;
+  const routineIndex = useMemo(() => {
+    const map = new Map<string, { name: string; color: string }>();
+    overview?.routines.forEach((r, i) => map.set(r.uuid, { name: r.name, color: routineColor(i) }));
+    return map;
+  }, [overview]);
 
-  const summary = useMemo(() => {
-    const parts: string[] = [];
-    const v = form.values;
-    if (v.keepHourly > 0) parts.push(`${v.keepHourly}× stündlich (die letzten ${v.keepHourly * v.intervalHours} Std.)`);
-    if (v.keepDaily > 0) parts.push(`${v.keepDaily}× täglich`);
-    if (v.keepWeekly > 0) parts.push(`${v.keepWeekly}× wöchentlich`);
-    if (v.keepMonthly > 0) parts.push(`${v.keepMonthly}× monatlich`);
-    return parts.join(', ');
-  }, [form.values]);
+  const routineName = (uuid: string | null) => (uuid ? (routineIndex.get(uuid)?.name ?? '?') : null);
 
-  const doSave = (values: PolicyUpdate) => {
+  const doSave = () => {
     setSaving(true);
-    const payload: PolicyUpdate = {
-      ...values,
-      ignoredFiles: ignoredText
-        .split('\n')
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0),
-    };
-
-    updatePolicy(serverUuid, payload)
+    updateConfig(serverUuid, { enabled, deleteFailed, routines: cleanRoutines(routines) })
       .then((data) => {
         applyOverview(data, true);
-        addToast(
-          payload.enabled
-            ? 'Richtlinie gespeichert. Automatische Backups sind aktiv.'
-            : 'Richtlinie gespeichert (pausiert).',
-          'success',
-        );
+        addToast(enabled ? 'Gespeichert. Automatische Backups sind aktiv.' : 'Gespeichert (pausiert).', 'success');
       })
       .catch((err) => addToast(httpErrorToHuman(err), 'error'))
       .finally(() => setSaving(false));
   };
 
-  const doRunNow = () => {
-    setRunning(true);
-    runNow(serverUuid)
+  const doApplyTemplate = () => {
+    if (!templateId || !overview) return;
+    const template = overview.templates.find((t) => t.id === templateId);
+    if (
+      overview.routines.length > 0 &&
+      !window.confirm(
+        `Vorlage "${template?.name}" anwenden? Die bisherigen Routinen werden ersetzt. Vorhandene Backups bleiben erhalten, werden aber keiner Routine mehr zugeordnet.`,
+      )
+    ) {
+      return;
+    }
+
+    setSaving(true);
+    applyTemplate(serverUuid, templateId, true)
+      .then((data) => {
+        applyOverview(data, true);
+        addToast(`Vorlage "${template?.name}" angewendet und aktiviert.`, 'success');
+      })
+      .catch((err) => addToast(httpErrorToHuman(err), 'error'))
+      .finally(() => setSaving(false));
+  };
+
+  const doRunNow = (routineUuid: string | null) => {
+    setRunning(routineUuid ?? 'any');
+    runNow(serverUuid, routineUuid)
       .then(() => {
-        addToast('Backup gestartet. Alte Backups werden gemäß Richtlinie rotiert.', 'success');
+        addToast('Backup gestartet.', 'success');
         load(false);
       })
       .catch((err) => addToast(httpErrorToHuman(err), 'error'))
-      .finally(() => setRunning(false));
+      .finally(() => setRunning(null));
   };
 
   const doPin = (backup: ManagedBackup) => {
@@ -209,13 +161,64 @@ export default function ServerPage() {
       .catch((err) => addToast(httpErrorToHuman(err), 'error'));
   };
 
-  const doSetTier = (backup: ManagedBackup, tier: Tier) => {
-    setTier(serverUuid, backup.uuid, tier)
+  const doAssign = (backup: ManagedBackup, routineUuid: string | null) => {
+    setBackupRoutine(serverUuid, backup.uuid, routineUuid)
       .then(() => {
-        addToast(`Backup als ${tierLabels[tier].toLowerCase()} markiert.`, 'success');
+        addToast(routineUuid ? `Backup "${routineName(routineUuid)}" zugeordnet.` : 'Backup aus der Rotation genommen.', 'success');
         load(false);
       })
       .catch((err) => addToast(httpErrorToHuman(err), 'error'));
+  };
+
+  const plannedBadge = (action: PlannedAction) => {
+    switch (action.type) {
+      case 'keep':
+        return (
+          <Badge color='green' variant='light'>
+            Bleibt
+          </Badge>
+        );
+      case 'move':
+        return (
+          <Badge color={routineIndex.get(action.to)?.color ?? 'blue'} variant='light'>
+            Wird „{routineName(action.to)}“
+          </Badge>
+        );
+      case 'delete':
+        return (
+          <Tooltip label={action.reason}>
+            <Badge color='red' variant='light'>
+              Wird gelöscht
+            </Badge>
+          </Tooltip>
+        );
+      case 'pinned':
+        return (
+          <Badge color='yellow' variant='light' leftSection={<FontAwesomeIcon icon={faThumbtack} />}>
+            Angepinnt
+          </Badge>
+        );
+      case 'running':
+        return (
+          <Badge color='gray' variant='light' leftSection={<Loader size={10} />}>
+            Läuft
+          </Badge>
+        );
+      case 'failed_kept':
+        return (
+          <Badge color='red' variant='outline'>
+            Fehlgeschlagen
+          </Badge>
+        );
+      case 'unassigned':
+        return (
+          <Tooltip label='Gehört zu keiner aktiven Routine und wird nicht automatisch gelöscht.'>
+            <Badge color='gray' variant='outline'>
+              Nicht verwaltet
+            </Badge>
+          </Tooltip>
+        );
+    }
   };
 
   if (!overview) {
@@ -229,15 +232,26 @@ export default function ServerPage() {
   }
 
   const { policy, limits, backups, log } = overview;
+  const keepTotal = routines.reduce((sum, r) => sum + (Number(r.keepCount) || 0), 0);
   const limitTooLow = limits.backupLimit < keepTotal;
-  const keptCount = backups.filter((b) => b.planned.type !== 'delete').length;
+  const routineErrors = overview.routines.filter((r) => r.lastError);
+  const selectedTemplate = overview.templates.find((t) => t.id === templateId);
+  const changed = (fn: () => void) => () => {
+    fn();
+    setDirty(true);
+  };
 
   return (
     <ServerContentContainer
       title='Auto-Backups'
       contentRight={
         <ServerCan action='backup-plus.manage'>
-          <Button leftSection={<FontAwesomeIcon icon={faBolt} />} loading={running} onClick={doRunNow}>
+          <Button
+            leftSection={<FontAwesomeIcon icon={faBolt} />}
+            loading={running === 'any'}
+            disabled={!overview.routines.some((r) => r.source === 'create')}
+            onClick={() => doRunNow(null)}
+          >
             Jetzt sichern
           </Button>
         </ServerCan>
@@ -255,6 +269,11 @@ export default function ServerPage() {
             {policy.lastError}
           </Alert>
         )}
+        {routineErrors.map((r) => (
+          <Alert key={r.uuid} color='orange' title={`Routine „${r.name}“`}>
+            {r.lastError}
+          </Alert>
+        ))}
 
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
           <TitleCard title='Status' icon={faRotate}>
@@ -263,22 +282,22 @@ export default function ServerPage() {
                 <Badge color={policy.enabled ? 'green' : 'gray'}>{policy.enabled ? 'Aktiv' : 'Pausiert'}</Badge>
               </Group>
               <Text size='sm' c='dimmed'>
-                Nächster Lauf: {policy.enabled ? (policy.nextRun ? formatDate(policy.nextRun) : 'in Kürze') : '–'}
+                Letzter Lauf: {formatDate(policy.lastRun)}
               </Text>
               <Text size='sm' c='dimmed'>
-                Letzter Lauf: {formatDate(policy.lastRun)}
+                Zeitzone: {overview.timezone}
               </Text>
             </Stack>
           </TitleCard>
           <TitleCard title='Verwaltete Backups' icon={faListUl}>
             <Text size='xl' fw={600}>
-              {keptCount} / {keepTotal}
+              {backups.filter((b) => b.planned.type !== 'delete').length}
             </Text>
             <Text size='sm' c='dimmed'>
               {formatBytes(backups.reduce((sum, b) => sum + b.bytes, 0))} belegt
             </Text>
           </TitleCard>
-          <TitleCard title='Backup-Limit' icon={faCalendarDays}>
+          <TitleCard title='Backup-Limit' icon={faLayerGroup}>
             <Text size='xl' fw={600} c={limitTooLow ? 'red' : undefined}>
               {limits.backupsTotal} / {limits.backupLimit}
             </Text>
@@ -286,90 +305,138 @@ export default function ServerPage() {
               alle Backups dieses Servers
             </Text>
           </TitleCard>
-          <TitleCard title='Rotation' icon={faClockRotateLeft}>
-            <Text size='sm'>{summary || 'Keine Stufe aktiv'}</Text>
+          <TitleCard title='Routinen' icon={faClockRotateLeft}>
+            <Stack gap={2}>
+              {overview.routines.length === 0 && (
+                <Text size='sm' c='dimmed'>
+                  keine
+                </Text>
+              )}
+              {overview.routines.map((r, i) => (
+                <Group key={r.uuid} gap={6} wrap='nowrap'>
+                  <Badge size='xs' color={routineColor(i)} variant='light'>
+                    {r.backupCount}/{r.keepCount}
+                  </Badge>
+                  <Text size='sm' truncate>
+                    {r.name} · nächster: {r.enabled ? (r.nextRun ? formatDate(r.nextRun) : 'gleich') : 'pausiert'}
+                  </Text>
+                </Group>
+              ))}
+            </Stack>
           </TitleCard>
         </SimpleGrid>
 
         <ServerCan action='backup-plus.manage'>
-          <TitleCard title='Richtlinie' icon={faCalendarDays}>
-            <form onSubmit={form.onSubmit(doSave)}>
-              <Stack>
+          <TitleCard title='Einrichtung' icon={faGear}>
+            <Stack>
+              <Group align='flex-end' wrap='wrap'>
+                <Select
+                  label='Vorlage'
+                  description={selectedTemplate?.description}
+                  className='flex-1'
+                  style={{ minWidth: 260 }}
+                  allowDeselect={false}
+                  value={templateId}
+                  data={overview.templates.map((t) => ({
+                    value: t.id,
+                    label: t.builtin ? t.name : `${t.name} (eigene)`,
+                  }))}
+                  onChange={setTemplateId}
+                />
+                <Button variant='light' loading={saving} disabled={!templateId} onClick={doApplyTemplate}>
+                  Vorlage anwenden
+                </Button>
+              </Group>
+
+              <Group>
                 <Switch
-                  label='Automatische Backups aktivieren'
-                  description='Beim Aktivieren wird innerhalb einer Minute das erste Backup erstellt.'
-                  {...form.getInputProps('enabled', { type: 'checkbox' })}
+                  label='Automatische Backups aktiv'
+                  checked={enabled}
+                  onChange={(e) => {
+                    const value = e.currentTarget.checked;
+                    changed(() => setEnabled(value))();
+                  }}
                 />
-
-                <SimpleGrid cols={{ base: 1, sm: 2 }}>
-                  <NumberInput
-                    label='Intervall (Stunden)'
-                    description={`Wie oft ein neues Backup erstellt wird (min. ${limits.minIntervalHours}).`}
-                    min={limits.minIntervalHours}
-                    max={168}
-                    {...form.getInputProps('intervalHours')}
-                  />
-                  <NumberInput
-                    label='Minute'
-                    description='Zu welcher Minute der Stunde gesichert wird (0–59, UTC-Stunde).'
-                    min={0}
-                    max={59}
-                    {...form.getInputProps('minuteOffset')}
-                  />
-                </SimpleGrid>
-
-                <SimpleGrid cols={{ base: 2, sm: 4 }}>
-                  <NumberInput label='Stündlich behalten' min={1} max={100} {...form.getInputProps('keepHourly')} />
-                  <NumberInput label='Täglich behalten' min={0} max={100} {...form.getInputProps('keepDaily')} />
-                  <NumberInput label='Wöchentlich behalten' min={0} max={100} {...form.getInputProps('keepWeekly')} />
-                  <NumberInput label='Monatlich behalten' min={0} max={100} {...form.getInputProps('keepMonthly')} />
-                </SimpleGrid>
-
-                <Text size='sm' c='dimmed'>
-                  Ergebnis: insgesamt {keepTotal} Backups ({summary || '–'}). Fällt ein stündliches Backup aus der
-                  Rotation, wird es zum monatlichen, wöchentlichen oder täglichen Backup befördert, sobald diese Stufe
-                  fällig ist – sonst gelöscht. Alles Ältere wird automatisch entfernt.
-                </Text>
-
-                {limitTooLow && (
-                  <Alert color='red'>
-                    Das Backup-Limit dieses Servers ({limits.backupLimit}) ist kleiner als die gewünschte Anzahl (
-                    {keepTotal}). Bitte einen Administrator, das Limit zu erhöhen (empfohlen: {keepTotal + 1}).
-                  </Alert>
-                )}
-                {keepTotal > limits.maxKeepTotal && (
-                  <Alert color='red'>Der Administrator erlaubt höchstens {limits.maxKeepTotal} Backups pro Server.</Alert>
-                )}
-
-                <TextInput
-                  label='Namensvorlage'
-                  description='Platzhalter: {date}, {day}, {time}, {tier}, {server}'
-                  {...form.getInputProps('nameTemplate')}
-                />
-
-                <TextArea
-                  label='Ignorierte Dateien'
-                  description='Eine Regel pro Zeile (wie .gitignore), z. B. logs/ oder *.tmp'
-                  autosize
-                  minRows={2}
-                  value={ignoredText}
-                  onChange={(e) => setIgnoredText(e.currentTarget.value)}
-                />
-
                 <Switch
                   label='Fehlgeschlagene Backups automatisch löschen'
-                  {...form.getInputProps('deleteFailed', { type: 'checkbox' })}
+                  checked={deleteFailed}
+                  onChange={(e) => {
+                    const value = e.currentTarget.checked;
+                    changed(() => setDeleteFailed(value))();
+                  }}
                 />
+              </Group>
 
-                <Group>
-                  <Button type='submit' loading={saving} disabled={!form.isValid()}>
-                    Speichern
-                  </Button>
-                </Group>
-              </Stack>
-            </form>
+              {limitTooLow && (
+                <Alert color='red'>
+                  Das Backup-Limit dieses Servers ({limits.backupLimit}) ist kleiner als die Summe der behaltenen
+                  Backups ({keepTotal}). Bitte einen Administrator, das Limit zu erhöhen (empfohlen: {keepTotal + 1}).
+                </Alert>
+              )}
+              {!limits.canCustomize && (
+                <Alert color='blue'>
+                  Eigene Routinen sind vom Administrator deaktiviert – du kannst eine der Vorlagen anwenden.
+                </Alert>
+              )}
+            </Stack>
           </TitleCard>
         </ServerCan>
+
+        <TitleCard title='Routinen' icon={faClockRotateLeft}>
+          <Stack>
+            <Text size='sm' c='dimmed'>
+              Jede Routine behält ihre neuesten Backups. Eine Routine vom Typ „übernehmen“ erstellt keine eigenen
+              Backups: Fällt ein Backup aus ihrer Quelle heraus und sie ist laut Zeitplan dran, wird es übernommen
+              statt gelöscht – so entstehen z. B. wöchentliche und monatliche Backups ohne Zusatzaufwand.
+            </Text>
+            <RoutineListEditor
+              routines={routines}
+              onChange={(next) => {
+                setRoutines(next);
+                setDirty(true);
+              }}
+              timezone={overview.timezone}
+              maxRoutines={limits.maxRoutines}
+              readOnly={!limits.canCustomize}
+              renderExtra={(routine) => {
+                const saved = overview.routines.find((r) => r.uuid === routine.uuid);
+                if (!saved) return null;
+                return (
+                  <Group gap='md'>
+                    <Text size='xs' c='dimmed'>
+                      Backups: {saved.backupCount}/{saved.keepCount} · letzter Lauf: {formatDate(saved.lastRun)} ·
+                      nächster: {saved.enabled ? (saved.nextRun ? formatDate(saved.nextRun) : 'gleich') : 'pausiert'}
+                    </Text>
+                    {saved.source === 'create' && (
+                      <ServerCan action='backup-plus.manage'>
+                        <Button
+                          size='compact-xs'
+                          variant='subtle'
+                          loading={running === saved.uuid}
+                          onClick={() => doRunNow(saved.uuid)}
+                        >
+                          Jetzt ausführen
+                        </Button>
+                      </ServerCan>
+                    )}
+                  </Group>
+                );
+              }}
+            />
+            <ServerCan action='backup-plus.manage'>
+              <Group>
+                <Button loading={saving} disabled={!dirty} onClick={doSave}>
+                  Speichern
+                </Button>
+                {dirty && (
+                  <Button variant='subtle' onClick={() => overview && applyOverview(overview, true)}>
+                    Änderungen verwerfen
+                  </Button>
+                )}
+              </Group>
+            </ServerCan>
+          </Stack>
+        </TitleCard>
 
         <TitleCard title='Verwaltete Backups' icon={faListUl}>
           {backups.length === 0 ? (
@@ -377,12 +444,12 @@ export default function ServerPage() {
               Noch keine automatischen Backups vorhanden.
             </Text>
           ) : (
-            <Table.ScrollContainer minWidth={700}>
+            <Table.ScrollContainer minWidth={760}>
               <Table striped highlightOnHover>
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Name</Table.Th>
-                    <Table.Th>Stufe</Table.Th>
+                    <Table.Th>Routine</Table.Th>
                     <Table.Th>Erstellt</Table.Th>
                     <Table.Th>Größe</Table.Th>
                     <Table.Th>Nächste Aktion</Table.Th>
@@ -390,53 +457,69 @@ export default function ServerPage() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {backups.map((backup) => (
-                    <Table.Tr key={backup.uuid}>
-                      <Table.Td>
-                        <Group gap={6} wrap='nowrap'>
-                          {backup.locked && <FontAwesomeIcon icon={faThumbtack} />}
-                          <Text size='sm'>{backup.name}</Text>
-                        </Group>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge color={tierColors[backup.tier]} variant='light'>
-                          {tierLabels[backup.tier]}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>{formatDate(backup.created)}</Table.Td>
-                      <Table.Td>{backup.completed ? formatBytes(backup.bytes) : '–'}</Table.Td>
-                      <Table.Td>
-                        <PlannedActionBadge action={backup.planned} />
-                      </Table.Td>
-                      <Table.Td>
-                        <ServerCan action='backup-plus.manage'>
-                          <Menu position='bottom-end' withinPortal>
-                            <Menu.Target>
-                              <ActionIcon variant='subtle' aria-label='Aktionen'>
-                                <FontAwesomeIcon icon={faEllipsisVertical} />
-                              </ActionIcon>
-                            </Menu.Target>
-                            <Menu.Dropdown>
-                              <Menu.Item leftSection={<FontAwesomeIcon icon={faThumbtack} />} onClick={() => doPin(backup)}>
-                                {backup.locked ? 'Loslösen' : 'Anpinnen (nie löschen)'}
-                              </Menu.Item>
-                              <Menu.Divider />
-                              <Menu.Label>Stufe ändern</Menu.Label>
-                              {(Object.keys(tierLabels) as Tier[]).map((tier) => (
+                  {backups.map((backup) => {
+                    const routine = backup.routineUuid ? routineIndex.get(backup.routineUuid) : undefined;
+                    return (
+                      <Table.Tr key={backup.uuid}>
+                        <Table.Td>
+                          <Group gap={6} wrap='nowrap'>
+                            {backup.locked && <FontAwesomeIcon icon={faThumbtack} />}
+                            <Text size='sm'>{backup.name}</Text>
+                          </Group>
+                        </Table.Td>
+                        <Table.Td>
+                          {routine ? (
+                            <Badge color={routine.color} variant='light'>
+                              {routine.name}
+                            </Badge>
+                          ) : (
+                            <Text size='sm' c='dimmed'>
+                              –
+                            </Text>
+                          )}
+                        </Table.Td>
+                        <Table.Td>{formatDate(backup.created)}</Table.Td>
+                        <Table.Td>{backup.completed ? formatBytes(backup.bytes) : '–'}</Table.Td>
+                        <Table.Td>{plannedBadge(backup.planned)}</Table.Td>
+                        <Table.Td>
+                          <ServerCan action='backup-plus.manage'>
+                            <Menu position='bottom-end' withinPortal>
+                              <Menu.Target>
+                                <ActionIcon variant='subtle' aria-label='Aktionen'>
+                                  <FontAwesomeIcon icon={faEllipsisVertical} />
+                                </ActionIcon>
+                              </Menu.Target>
+                              <Menu.Dropdown>
                                 <Menu.Item
-                                  key={tier}
-                                  disabled={tier === backup.tier}
-                                  onClick={() => doSetTier(backup, tier)}
+                                  leftSection={<FontAwesomeIcon icon={faThumbtack} />}
+                                  onClick={() => doPin(backup)}
                                 >
-                                  {tierLabels[tier]}
+                                  {backup.locked ? 'Loslösen' : 'Anpinnen (nie löschen)'}
                                 </Menu.Item>
-                              ))}
-                            </Menu.Dropdown>
-                          </Menu>
-                        </ServerCan>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
+                                <Menu.Divider />
+                                <Menu.Label>Routine zuordnen</Menu.Label>
+                                {overview.routines.map((r) => (
+                                  <Menu.Item
+                                    key={r.uuid}
+                                    disabled={r.uuid === backup.routineUuid}
+                                    onClick={() => doAssign(backup, r.uuid)}
+                                  >
+                                    {r.name}
+                                  </Menu.Item>
+                                ))}
+                                <Menu.Item
+                                  disabled={backup.routineUuid === null}
+                                  onClick={() => doAssign(backup, null)}
+                                >
+                                  Keine (aus Rotation nehmen)
+                                </Menu.Item>
+                              </Menu.Dropdown>
+                            </Menu>
+                          </ServerCan>
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
                 </Table.Tbody>
               </Table>
             </Table.ScrollContainer>
