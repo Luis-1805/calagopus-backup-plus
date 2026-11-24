@@ -210,7 +210,7 @@ export default function AdminPage() {
             tExt('admin.bulk.resultSkipped', { applied: result.applied, skipped: result.skipped.length }),
             'warning',
           );
-          console.warn('Backup Plus – skipped servers:', result.skipped);
+          console.warn('Backups Plus – skipped servers:', result.skipped);
         } else {
           addToast(tExt('admin.bulk.result', { applied: result.applied }), 'success');
         }

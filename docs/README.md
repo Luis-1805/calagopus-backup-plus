@@ -1,6 +1,6 @@
-# 📖 Backup Plus Guide
+# 📖 Backups Plus Guide
 
-Everything you need to know to set up, use and run Backup Plus — from your first routine to managing hundreds of servers.
+Everything you need to know to set up, use and run Backups Plus — from your first routine to managing hundreds of servers.
 
 ## Start here
 
@@ -10,7 +10,7 @@ Everything you need to know to set up, use and run Backup Plus — from your fir
 | 🎓 | [Tutorial: build your own strategy](tutorial.md) | **For beginners:** plan and build a complete backup strategy step by step — no template, every setting explained, with exercises |
 | 💡 | [Core concepts](concepts.md) | Routines, "take over", rotation and what happens to every backup |
 
-## Using Backup Plus
+## Using Backups Plus
 
 | | Page | What you'll learn |
 | --- | --- | --- |
@@ -19,13 +19,13 @@ Everything you need to know to set up, use and run Backup Plus — from your fir
 | 🧩 | [Templates](templates.md) | The built-in templates and how to apply them |
 | 🍳 | [Recipes](recipes.md) | Ready-to-use setups for common backup strategies |
 
-## Running Backup Plus
+## Running Backups Plus
 
 | | Page | What you'll learn |
 | --- | --- | --- |
 | ⚙️ | [Administration](admin.md) | Global settings, custom templates, bulk rollout and permissions |
 | 🛠️ | [Troubleshooting & FAQ](troubleshooting.md) | Error messages, skipped backups and common questions |
-| 🔌 | [API](api.md) | Automate Backup Plus with the panel API |
+| 🔌 | [API](api.md) | Automate Backups Plus with the panel API |
 | 🔍 | [How it works](how-it-works.md) | The background task, rotation algorithm, database tables and translations |
 
 ---

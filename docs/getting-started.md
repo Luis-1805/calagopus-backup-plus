@@ -16,15 +16,15 @@ This page takes you from zero to working automatic backups.
 
 | Requirement | Why |
 | --- | --- |
-| Calagopus panel **1.2.11 or newer** | Backup Plus uses panel APIs that were added in that version |
+| Calagopus panel **1.2.11 or newer** | Backups Plus uses panel APIs that were added in that version |
 | The **`:heavy`** Docker image (or a development environment) | Extensions are compiled when they are installed; the regular image has no compiler. See [Switching to the heavy image](https://calagopus.com/docs/panel/extensions/switching-to-the-heavy-image) |
-| A working **backup configuration** for your servers | Backup Plus creates normal panel backups, so the panel must already be able to back up the server (local, S3, restic, Kopia, …) |
+| A working **backup configuration** for your servers | Backups Plus creates normal panel backups, so the panel must already be able to back up the server (local, S3, restic, Kopia, …) |
 
 ## 2. Install the extension
 
 **Docker (`:heavy` image)**
 
-1. Download `dev_backupplus_gfsbackups.c7s.zip` from the
+1. Download `dev_backupsplus_backups.c7s.zip` from the
    [latest release](https://github.com/Luis-1805/calagopus-backup-plus/releases/latest).
 2. Open the panel as an administrator and go to **Admin → Extensions**.
 3. Drop the file into the upload area. The panel builds and loads the extension; this usually takes one to two minutes.
@@ -36,16 +36,16 @@ Alternatively, copy the file into the panel's `extensions/` data directory (with
 **Development environment**
 
 ```bash
-panel-rs extensions add dev_backupplus_gfsbackups.c7s.zip
+panel-rs extensions add dev_backupsplus_backups.c7s.zip
 panel-rs extensions apply --profile balanced
 ```
 
-After the build, **Backup Plus** appears in the extension list. Its card shows a short summary
+After the build, **Backups Plus** appears in the extension list. Its card shows a short summary
 (active servers · routines · backups), and **Configure** opens the [admin page](admin.md).
 
 ## 3. Check the backup limit
 
-Every Calagopus server has a **backup limit** — the maximum number of backups it may have. Backup Plus respects that
+Every Calagopus server has a **backup limit** — the maximum number of backups it may have. Backups Plus respects that
 limit, and **all** backups count towards it, including manual ones.
 
 > [!IMPORTANT]
@@ -54,7 +54,7 @@ limit, and **all** backups count towards it, including manual ones.
 > For the default template (3 hourly + 1 weekly + 1 monthly) that is **5 + 1 = 6**.
 
 Why plus one? A new backup exists for a few minutes alongside the old ones until the next rotation sorts it in. If the
-limit is exactly the number of kept backups, Backup Plus first frees a slot by rotating out the oldest backup of the
+limit is exactly the number of kept backups, Backups Plus first frees a slot by rotating out the oldest backup of the
 routine that is about to run — this works, but it means you briefly have one backup fewer.
 
 You change the limit as an administrator in the server's settings in the admin area (**Admin → Servers**). The
@@ -81,7 +81,7 @@ That's it. The first backup is created within about a minute.
 - After a minute, the **Managed backups** table shows the new backup with the action **Running**, then **Stays**.
 - The **Log** at the bottom of the page records every step, for example *Started "Auto Hourly 2026-11-24 13:00" for
   routine "Hourly"*.
-- In the panel's normal **Backups** page, the backups appear in the group **Backup Plus (auto)**.
+- In the panel's normal **Backups** page, the backups appear in the group **Backups Plus (auto)**.
 
 Over the next few hours you will see the rotation in action: once there are more than 3 hourly backups, the oldest one
 either moves to the weekly or monthly routine (if that routine is due) or is deleted. See
@@ -93,8 +93,8 @@ Server owners can always use the tab. For subusers, grant the permissions in the
 
 | Permission | Allows |
 | --- | --- |
-| `backup-plus.read` | Seeing the Auto-Backups tab: routines, backups, next actions and the log |
-| `backup-plus.manage` | Changing routines, applying templates, **Back up now**, pinning backups and assigning them to routines |
+| `backups-plus.read` | Seeing the Auto-Backups tab: routines, backups, next actions and the log |
+| `backups-plus.manage` | Changing routines, applying templates, **Back up now**, pinning backups and assigning them to routines |
 
 ## Updating and uninstalling
 
@@ -103,7 +103,7 @@ Server owners can always use the tab. For subusers, grant the permissions in the
 keep their assignment.
 
 **Uninstalling:** remove the extension under **Admin → Extensions**. Your backups are **not** deleted — they stay in the
-**Backup Plus (auto)** group and can be managed like any other backup.
+**Backups Plus (auto)** group and can be managed like any other backup.
 
 ---
 

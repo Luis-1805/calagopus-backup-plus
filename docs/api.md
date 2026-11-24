@@ -21,16 +21,16 @@ appear in the panel's OpenAPI documentation.
 
 ## Server endpoints
 
-Base path: `/api/client/servers/{server}/backup-plus`
+Base path: `/api/client/servers/{server}/backups-plus`
 
 | Method | Path | Permission | Description |
 | --- | --- | --- | --- |
-| `GET` | `/` | `backup-plus.read` | Everything the tab shows: settings, routines, backups with planned action, log, limits, templates, time zone |
-| `PUT` | `/` | `backup-plus.manage` | Save settings and routines |
-| `POST` | `/apply-template` | `backup-plus.manage` | Replace the routines with a template |
-| `POST` | `/run` | `backup-plus.manage` | Create a backup now (rate limit: 3/min per server) |
-| `POST` | `/backups/{backup}/pin` | `backup-plus.manage` | Pin or unpin a managed backup |
-| `PUT` | `/backups/{backup}/routine` | `backup-plus.manage` | Assign a managed backup to a routine, or to none |
+| `GET` | `/` | `backups-plus.read` | Everything the tab shows: settings, routines, backups with planned action, log, limits, templates, time zone |
+| `PUT` | `/` | `backups-plus.manage` | Save settings and routines |
+| `POST` | `/apply-template` | `backups-plus.manage` | Replace the routines with a template |
+| `POST` | `/run` | `backups-plus.manage` | Create a backup now (rate limit: 3/min per server) |
+| `POST` | `/backups/{backup}/pin` | `backups-plus.manage` | Pin or unpin a managed backup |
+| `PUT` | `/backups/{backup}/routine` | `backups-plus.manage` | Assign a managed backup to a routine, or to none |
 
 ### `PUT /` — save settings and routines
 
@@ -154,7 +154,7 @@ Template IDs are listed in `GET /` (`templates[].id`). Built-in IDs: `gfs-kompak
 
 ## Admin endpoints
 
-Base path: `/api/admin/extensions/dev.backupplus.gfsbackups`
+Base path: `/api/admin/extensions/dev.backupsplus.backups`
 
 | Method | Path | Permission | Description |
 | --- | --- | --- | --- |
@@ -197,7 +197,7 @@ template routines, sources are referenced by name via `source_name`.
 Set up a new server with the default template (e.g. from a provisioning script):
 
 ```bash
-curl -X POST "https://panel.example.com/api/client/servers/$SERVER/backup-plus/apply-template" \
+curl -X POST "https://panel.example.com/api/client/servers/$SERVER/backups-plus/apply-template" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"template_id": "gfs-kompakt", "enabled": true}'
@@ -206,7 +206,7 @@ curl -X POST "https://panel.example.com/api/client/servers/$SERVER/backup-plus/a
 Trigger a backup before a deployment:
 
 ```bash
-curl -X POST "https://panel.example.com/api/client/servers/$SERVER/backup-plus/run" \
+curl -X POST "https://panel.example.com/api/client/servers/$SERVER/backups-plus/run" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{}'

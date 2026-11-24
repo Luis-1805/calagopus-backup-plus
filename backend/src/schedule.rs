@@ -16,7 +16,7 @@ pub enum TimezoneSource {
     Server,
     /// Systemzeitzone des Nodes (Wings) – das, was der Server ohne eigene Einstellung nutzt.
     Node,
-    /// Standard-Zeitzone aus den Backup-Plus-Einstellungen des Admins.
+    /// Standard-Zeitzone aus den Backups-Plus-Einstellungen des Admins.
     Extension,
     /// Nichts davon verfügbar: UTC.
     Fallback,

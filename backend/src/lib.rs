@@ -10,6 +10,7 @@ use shared::{
 use std::{str::FromStr, sync::Arc};
 
 mod engine;
+mod legacy;
 mod i18n;
 mod models;
 mod retention;
@@ -21,7 +22,7 @@ mod settings;
 #[cfg(test)]
 mod simulation_tests;
 
-pub const PACKAGE_NAME: &str = "dev.backupplus.gfsbackups";
+pub const PACKAGE_NAME: &str = "dev.backupsplus.backups";
 
 #[derive(Default)]
 pub struct ExtensionStruct;
@@ -29,7 +30,7 @@ pub struct ExtensionStruct;
 #[async_trait::async_trait]
 impl Extension for ExtensionStruct {
     async fn initialize(&mut self, _state: State) {
-        tracing::info!("backup-plus: extension loaded");
+        tracing::info!("backups-plus: extension loaded");
     }
 
     async fn initialize_router(
@@ -39,11 +40,11 @@ impl Extension for ExtensionStruct {
     ) -> ExtensionRouteBuilder {
         builder
             .add_client_server_api_router(|router| {
-                router.nest("/backup-plus", routes::server::router(&state))
+                router.nest("/backups-plus", routes::server::router(&state))
             })
             .add_admin_api_router(|router| {
                 router.nest(
-                    "/extensions/dev.backupplus.gfsbackups",
+                    "/extensions/dev.backupsplus.backups",
                     routes::admin::router(&state),
                 )
             })
@@ -57,7 +58,7 @@ impl Extension for ExtensionStruct {
         // Jede Minute (6-Feld-Cron mit Sekunden, UTC).
         builder
             .add_cron_task(
-                "backup_plus_tick",
+                "backups_plus_tick",
                 croner::Cron::from_str("0 * * * * *").expect("valid cron expression"),
                 |state| async move { engine::tick(state).await },
             )
@@ -72,9 +73,9 @@ impl Extension for ExtensionStruct {
         builder: ExtensionPermissionsBuilder,
     ) -> ExtensionPermissionsBuilder {
         builder.add_server_permission_group(
-            "backup-plus",
+            "backups-plus",
             PermissionGroup {
-                description: "Permissions for automatic backups (Backup Plus).",
+                description: "Permissions for automatic backups (Backups Plus).",
                 permissions: IndexMap::from([
                     (
                         "read",

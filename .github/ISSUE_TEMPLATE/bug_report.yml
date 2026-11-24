@@ -30,7 +30,7 @@ body:
   - type: input
     id: extension-version
     attributes:
-      label: Backup Plus version
+      label: Backups Plus version
       placeholder: e.g. 2.0.0
     validations:
       required: true

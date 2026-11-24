@@ -2,7 +2,7 @@
 
 [← Guide overview](README.md)
 
-Each server gets an **Auto-Backups** entry in its sidebar (visible with the `backup-plus.read` permission). The page is
+Each server gets an **Auto-Backups** entry in its sidebar (visible with the `backups-plus.read` permission). The page is
 built from top to bottom like this:
 
 ```text
@@ -42,7 +42,7 @@ See [Run now](routines.md#run-now).
 
 | Alert | When it appears | What to do |
 | --- | --- | --- |
-| 🟡 **Disabled globally** | An admin switched off Backup Plus for the whole panel | Nothing to do on the server; ask the admin |
+| 🟡 **Disabled globally** | An admin switched off Backups Plus for the whole panel | Nothing to do on the server; ask the admin |
 | 🔴 **Last run failed** | The last automatic or manual run ended with an error | Read the message; see [Troubleshooting](troubleshooting.md) |
 | 🟠 **Routine "…"** | The last run of that routine failed | Same as above; the message is specific to the routine |
 | 🔴 **Backup limit too low** (in *Setup*) | The server's backup limit is lower than the total *Keep* of your routines | Ask an admin to raise the limit to the recommended value |
@@ -55,14 +55,14 @@ Errors are cleared automatically by the next successful run.
 
 | Card | Shows |
 | --- | --- |
-| **Status** | *Active* or *Paused*, the time of the last run, the time zone in use and where it comes from (server settings, node default, Backup Plus default or fallback) — see [Time zones](concepts.md#time-zones) |
-| **Managed backups** | How many backups Backup Plus manages right now (not counting those about to be deleted) and the storage they use |
+| **Status** | *Active* or *Paused*, the time of the last run, the time zone in use and where it comes from (server settings, node default, Backups Plus default or fallback) — see [Time zones](concepts.md#time-zones) |
+| **Managed backups** | How many backups Backups Plus manages right now (not counting those about to be deleted) and the storage they use |
 | **Backup limit** | All backups of the server (including manual ones) / the server's limit — red if the limit is too low |
 | **Routines** | One line per routine: `backups/keep`, name and next run (*soon* = due now, *paused* = routine paused) |
 
 ## Setup
 
-*(requires `backup-plus.manage`)*
+*(requires `backups-plus.manage`)*
 
 **Template + Apply template** — replaces all routines of the server with the selected template and switches automatic
 backups on. If the server already has routines you are asked to confirm. Existing backups are **kept**; backups of
@@ -99,7 +99,7 @@ When the admin has disabled custom routines, the editor is read-only and you can
 
 ## Managed backups
 
-All backups in the server's *Backup Plus (auto)* group, newest first.
+All backups in the server's *Backups Plus (auto)* group, newest first.
 
 | Column | Meaning |
 | --- | --- |
@@ -119,13 +119,13 @@ All backups in the server's *Backup Plus (auto)* group, newest first.
 | ⚠️ **Failed** | Failed and kept (because *delete failed backups* is off) |
 | ⚪ **Not managed** | No active routine; left alone |
 
-The **⋮ menu** of each backup *(requires `backup-plus.manage`)*:
+The **⋮ menu** of each backup *(requires `backups-plus.manage`)*:
 
 - **Pin (never delete) / Unpin** — pinned backups are excluded from rotation. Pinning uses the panel's own backup lock,
   so a pinned backup is also protected in the panel's normal backup page.
 - **Assign routine** — move a backup to another routine, for example to keep a specific backup as your monthly one.
   The target routine's *Keep* rule applies immediately on the next rotation.
-- **None (remove from rotation)** — the backup leaves Backup Plus' control. It stays in the group and is shown as
+- **None (remove from rotation)** — the backup leaves Backups Plus' control. It stays in the group and is shown as
   *Not managed*.
 
 > [!TIP]
@@ -149,7 +149,7 @@ The last 50 entries for this server, newest first. Each entry has a level (*info
 
 The log is shown in **your** panel language, regardless of who or what created the entry. The admin decides how many
 entries are kept per server (default 100). All backup creations and deletions are additionally recorded in the panel's
-normal **Activity** log with `"source": "backup-plus"`.
+normal **Activity** log with `"source": "backups-plus"`.
 
 ## Who sees what
 

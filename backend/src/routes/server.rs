@@ -1,4 +1,4 @@
-//! Routen unter `/api/client/servers/{server}/backup-plus`.
+//! Routen unter `/api/client/servers/{server}/backups-plus`.
 
 use shared::State;
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -237,7 +237,7 @@ mod get {
         server: GetServer,
         user: shared::models::user::GetUser,
     ) -> ApiResponseResult {
-        permissions.has_server_permission("backup-plus.read")?;
+        permissions.has_server_permission("backups-plus.read")?;
         let lang = crate::i18n::Lang::from_code(&user.language);
 
         let settings = crate::settings::load(&state).await;
@@ -340,7 +340,7 @@ mod put {
                 .ok();
         }
 
-        permissions.has_server_permission("backup-plus.manage")?;
+        permissions.has_server_permission("backups-plus.manage")?;
         let lang = crate::i18n::Lang::from_code(&user.language);
 
         let settings = crate::settings::load(&state).await;
@@ -460,7 +460,7 @@ mod put {
 
         activity_logger
             .log(
-                "server:backup-plus.update",
+                "server:backups-plus.update",
                 serde_json::json!({
                     "enabled": policy.enabled,
                     "delete_failed": policy.delete_failed,
@@ -525,7 +525,7 @@ mod apply_template {
             activity_logger: GetServerActivityLogger,
             shared::Payload(data): shared::Payload<Payload>,
         ) -> ApiResponseResult {
-            permissions.has_server_permission("backup-plus.manage")?;
+            permissions.has_server_permission("backups-plus.manage")?;
             let lang = crate::i18n::Lang::from_code(&user.language);
 
             let settings = crate::settings::load(&state).await;
@@ -572,7 +572,7 @@ mod apply_template {
             .await;
             activity_logger
                 .log(
-                    "server:backup-plus.apply-template",
+                    "server:backups-plus.apply-template",
                     serde_json::json!({ "template": template.id, "enabled": data.enabled }),
                 )
                 .await;
@@ -634,12 +634,12 @@ mod run {
             activity_logger: GetServerActivityLogger,
             shared::Payload(data): shared::Payload<Payload>,
         ) -> ApiResponseResult {
-            permissions.has_server_permission("backup-plus.manage")?;
+            permissions.has_server_permission("backups-plus.manage")?;
             let lang = crate::i18n::Lang::from_code(&user.language);
 
             state
                 .cache
-                .ratelimit("backup-plus/run", 3, 60, server.uuid.to_string())
+                .ratelimit("backups-plus/run", 3, 60, server.uuid.to_string())
                 .await?;
 
             let backup_uuid =
@@ -665,7 +665,7 @@ mod run {
 
             activity_logger
                 .log(
-                    "server:backup-plus.run",
+                    "server:backups-plus.run",
                     serde_json::json!({ "backup_uuid": backup_uuid, "routine_uuid": data.routine_uuid }),
                 )
                 .await;
@@ -756,7 +756,7 @@ mod backup {
             axum::extract::Path((_server, backup_uuid)): axum::extract::Path<(uuid::Uuid, uuid::Uuid)>,
             shared::Payload(data): shared::Payload<Payload>,
         ) -> ApiResponseResult {
-            permissions.has_server_permission("backup-plus.manage")?;
+            permissions.has_server_permission("backups-plus.manage")?;
             let lang = crate::i18n::Lang::from_code(&user.language);
 
             let mut backup = super::find_managed(&state, server.uuid, backup_uuid, lang).await?;
@@ -781,7 +781,7 @@ mod backup {
 
             activity_logger
                 .log(
-                    "server:backup-plus.pin",
+                    "server:backups-plus.pin",
                     serde_json::json!({ "uuid": backup.uuid, "locked": data.locked }),
                 )
                 .await;
@@ -824,7 +824,7 @@ mod backup {
             axum::extract::Path((_server, backup_uuid)): axum::extract::Path<(uuid::Uuid, uuid::Uuid)>,
             shared::Payload(data): shared::Payload<Payload>,
         ) -> ApiResponseResult {
-            permissions.has_server_permission("backup-plus.manage")?;
+            permissions.has_server_permission("backups-plus.manage")?;
             let lang = crate::i18n::Lang::from_code(&user.language);
 
             let backup = super::find_managed(&state, server.uuid, backup_uuid, lang).await?;

@@ -5,7 +5,7 @@ use shared::database::Database;
 use sqlx::Row;
 use utoipa::ToSchema;
 
-/// Server-weite Einstellungen von Backup Plus.
+/// Server-weite Einstellungen von Backups Plus.
 #[derive(Clone)]
 pub struct Policy {
     pub server_uuid: uuid::Uuid,
@@ -35,7 +35,7 @@ impl Policy {
         let row = sqlx::query(
             r#"
             SELECT server_uuid, backup_group_uuid, enabled, delete_failed, last_run, last_error
-            FROM backup_plus_policies
+            FROM backups_plus_policies
             WHERE server_uuid = $1
             "#,
         )
@@ -59,7 +59,7 @@ impl Policy {
     pub async fn upsert(&self, database: &Database) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            INSERT INTO backup_plus_policies (
+            INSERT INTO backups_plus_policies (
                 server_uuid, backup_group_uuid, enabled, delete_failed, last_run, last_error, updated
             )
             VALUES ($1, $2, $3, $4, $5, $6, NOW() AT TIME ZONE 'UTC')
@@ -88,7 +88,7 @@ impl Policy {
     pub async fn save_run_state(&self, database: &Database) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            UPDATE backup_plus_policies
+            UPDATE backups_plus_policies
             SET backup_group_uuid = $2, last_run = $3, last_error = $4
             WHERE server_uuid = $1
             "#,
@@ -110,17 +110,17 @@ impl Policy {
     ) -> Result<Vec<uuid::Uuid>, sqlx::Error> {
         sqlx::query_scalar(
             r#"
-            SELECT backup_plus_policies.server_uuid
-            FROM backup_plus_policies
-            WHERE backup_plus_policies.enabled
+            SELECT backups_plus_policies.server_uuid
+            FROM backups_plus_policies
+            WHERE backups_plus_policies.enabled
                 AND EXISTS (
-                    SELECT 1 FROM backup_plus_routines
-                    WHERE backup_plus_routines.server_uuid = backup_plus_policies.server_uuid
-                        AND backup_plus_routines.enabled
-                        AND backup_plus_routines.source = 'create'
-                        AND (backup_plus_routines.next_run IS NULL OR backup_plus_routines.next_run <= $1)
+                    SELECT 1 FROM backups_plus_routines
+                    WHERE backups_plus_routines.server_uuid = backups_plus_policies.server_uuid
+                        AND backups_plus_routines.enabled
+                        AND backups_plus_routines.source = 'create'
+                        AND (backups_plus_routines.next_run IS NULL OR backups_plus_routines.next_run <= $1)
                 )
-            ORDER BY backup_plus_policies.last_run NULLS FIRST
+            ORDER BY backups_plus_policies.last_run NULLS FIRST
             "#,
         )
         .bind(now)
@@ -130,7 +130,7 @@ impl Policy {
 
     /// Alle Server mit aktiver Richtlinie.
     pub async fn servers_enabled(database: &Database) -> Result<Vec<uuid::Uuid>, sqlx::Error> {
-        sqlx::query_scalar("SELECT server_uuid FROM backup_plus_policies WHERE enabled")
+        sqlx::query_scalar("SELECT server_uuid FROM backups_plus_policies WHERE enabled")
             .fetch_all(database.write())
             .await
     }
@@ -197,7 +197,7 @@ impl Routine {
             r#"
             SELECT uuid, server_uuid, name, enabled, position, cron, source, source_routine_uuid,
                 keep_count, max_age_hours, name_template, rename_template, ignored_files, next_run, last_run, last_error
-            FROM backup_plus_routines
+            FROM backups_plus_routines
             WHERE server_uuid = $1
             ORDER BY position, created, uuid
             "#,
@@ -234,7 +234,7 @@ impl Routine {
     pub async fn save_run_state(&self, database: &Database) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            UPDATE backup_plus_routines
+            UPDATE backups_plus_routines
             SET next_run = $2, last_run = $3, last_error = $4
             WHERE uuid = $1
             "#,
@@ -268,7 +268,7 @@ impl Routine {
         let mut transaction = database.write().begin().await?;
 
         let keep: Vec<uuid::Uuid> = routines.iter().map(|r| r.uuid).collect();
-        sqlx::query("DELETE FROM backup_plus_routines WHERE server_uuid = $1 AND NOT (uuid = ANY($2))")
+        sqlx::query("DELETE FROM backups_plus_routines WHERE server_uuid = $1 AND NOT (uuid = ANY($2))")
             .bind(server_uuid)
             .bind(&keep)
             .execute(&mut *transaction)
@@ -278,7 +278,7 @@ impl Routine {
         for routine in routines {
             sqlx::query(
                 r#"
-                INSERT INTO backup_plus_routines (
+                INSERT INTO backups_plus_routines (
                     uuid, server_uuid, name, enabled, position, cron, source, source_routine_uuid,
                     keep_count, max_age_hours, name_template, ignored_files, next_run, rename_template
                 )
@@ -317,7 +317,7 @@ impl Routine {
 
         for routine in routines {
             if let Some(source) = routine.source_routine_uuid {
-                sqlx::query("UPDATE backup_plus_routines SET source_routine_uuid = $2 WHERE uuid = $1")
+                sqlx::query("UPDATE backups_plus_routines SET source_routine_uuid = $2 WHERE uuid = $1")
                     .bind(routine.uuid)
                     .bind(source)
                     .execute(&mut *transaction)
@@ -361,9 +361,9 @@ impl ManagedBackup {
                 server_backups.bytes,
                 server_backups.completed,
                 server_backups.created,
-                backup_plus_backups.routine_uuid
+                backups_plus_backups.routine_uuid
             FROM server_backups
-            LEFT JOIN backup_plus_backups ON backup_plus_backups.backup_uuid = server_backups.uuid
+            LEFT JOIN backups_plus_backups ON backups_plus_backups.backup_uuid = server_backups.uuid
             WHERE
                 server_backups.server_uuid = $1
                 AND server_backups.backup_group_uuid = $2
@@ -428,7 +428,7 @@ pub async fn set_routine(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        INSERT INTO backup_plus_backups (backup_uuid, server_uuid, routine_uuid, promoted)
+        INSERT INTO backups_plus_backups (backup_uuid, server_uuid, routine_uuid, promoted)
         VALUES ($1, $2, $3, NOW() AT TIME ZONE 'UTC')
         ON CONFLICT (backup_uuid) DO UPDATE SET
             routine_uuid = EXCLUDED.routine_uuid,
@@ -458,7 +458,7 @@ pub async fn write_log(
     message: crate::i18n::Msg,
 ) {
     let result = sqlx::query(
-        "INSERT INTO backup_plus_log (server_uuid, level, message) VALUES ($1, $2, $3)",
+        "INSERT INTO backups_plus_log (server_uuid, level, message) VALUES ($1, $2, $3)",
     )
     .bind(server_uuid)
     .bind(level)
@@ -467,7 +467,7 @@ pub async fn write_log(
     .await;
 
     if let Err(err) = result {
-        tracing::warn!(server = %server_uuid, "backup-plus: failed to write log entry: {err:#?}");
+        tracing::warn!(server = %server_uuid, "backups-plus: failed to write log entry: {err:#?}");
     }
 }
 
@@ -480,7 +480,7 @@ pub async fn read_log(
     let rows = sqlx::query(
         r#"
         SELECT level, message, created
-        FROM backup_plus_log
+        FROM backups_plus_log
         WHERE server_uuid = $1
         ORDER BY created DESC, id DESC
         LIMIT $2
@@ -508,11 +508,11 @@ pub async fn read_log(
 pub async fn trim_log(database: &Database, keep: i64) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        DELETE FROM backup_plus_log
+        DELETE FROM backups_plus_log
         WHERE id IN (
             SELECT id FROM (
                 SELECT id, ROW_NUMBER() OVER (PARTITION BY server_uuid ORDER BY created DESC, id DESC) AS rn
-                FROM backup_plus_log
+                FROM backups_plus_log
             ) ranked
             WHERE ranked.rn > $1
         )
@@ -535,7 +535,7 @@ pub async fn all_server_uuids(
         SELECT servers.uuid
         FROM servers
         WHERE NOT $1 OR NOT EXISTS (
-            SELECT 1 FROM backup_plus_routines WHERE backup_plus_routines.server_uuid = servers.uuid
+            SELECT 1 FROM backups_plus_routines WHERE backups_plus_routines.server_uuid = servers.uuid
         )
         ORDER BY servers.created
         "#,
@@ -559,17 +559,17 @@ pub async fn overview(database: &Database) -> Result<Overview, sqlx::Error> {
     let row = sqlx::query(
         r#"
         SELECT
-            (SELECT COUNT(*) FROM backup_plus_policies) AS policies_total,
-            (SELECT COUNT(*) FROM backup_plus_policies WHERE enabled) AS policies_enabled,
-            (SELECT COUNT(*) FROM backup_plus_routines) AS routines_total,
-            (SELECT COUNT(DISTINCT backup_plus_routines.server_uuid) FROM backup_plus_routines
-                JOIN backup_plus_policies ON backup_plus_policies.server_uuid = backup_plus_routines.server_uuid
-                WHERE backup_plus_policies.enabled AND backup_plus_routines.last_error IS NOT NULL) AS policies_with_errors,
+            (SELECT COUNT(*) FROM backups_plus_policies) AS policies_total,
+            (SELECT COUNT(*) FROM backups_plus_policies WHERE enabled) AS policies_enabled,
+            (SELECT COUNT(*) FROM backups_plus_routines) AS routines_total,
+            (SELECT COUNT(DISTINCT backups_plus_routines.server_uuid) FROM backups_plus_routines
+                JOIN backups_plus_policies ON backups_plus_policies.server_uuid = backups_plus_routines.server_uuid
+                WHERE backups_plus_policies.enabled AND backups_plus_routines.last_error IS NOT NULL) AS policies_with_errors,
             (SELECT COUNT(*) FROM server_backups
-                JOIN backup_plus_policies ON backup_plus_policies.backup_group_uuid = server_backups.backup_group_uuid
+                JOIN backups_plus_policies ON backups_plus_policies.backup_group_uuid = server_backups.backup_group_uuid
                 WHERE server_backups.deleted IS NULL) AS managed_backups,
             (SELECT COALESCE(SUM(server_backups.bytes), 0)::BIGINT FROM server_backups
-                JOIN backup_plus_policies ON backup_plus_policies.backup_group_uuid = server_backups.backup_group_uuid
+                JOIN backups_plus_policies ON backups_plus_policies.backup_group_uuid = server_backups.backup_group_uuid
                 WHERE server_backups.deleted IS NULL) AS managed_bytes
         "#,
     )

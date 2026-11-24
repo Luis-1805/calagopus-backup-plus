@@ -2,7 +2,7 @@
 
 [← Guide overview](README.md)
 
-Backup Plus is built around a handful of ideas. Once they click, every setting makes sense.
+Backups Plus is built around a handful of ideas. Once they click, every setting makes sense.
 
 - [Routines](#routines)
 - [Two kinds of routines: create and take over](#two-kinds-of-routines-create-and-take-over)
@@ -24,7 +24,7 @@ A server can have several routines (10 by default, configurable by the admin). E
 - a **schedule** (a cron expression in the server's time zone),
 - how many backups to **keep**, and optionally a **maximum age**.
 
-Every backup created by Backup Plus belongs to exactly one routine. The routine decides how long the backup lives.
+Every backup created by Backups Plus belongs to exactly one routine. The routine decides how long the backup lives.
 
 ## Two kinds of routines: create and take over
 
@@ -44,7 +44,7 @@ backup every hour — when one of them would be deleted anyway, a weekly routine
 
 Each routine has a **next run** time, calculated from its schedule.
 
-- A **create** routine is due when its next run time has passed. Backup Plus then creates a backup and calculates the
+- A **create** routine is due when its next run time has passed. Backups Plus then creates a backup and calculates the
   next run.
 - A **take over** routine is due when its next run time has passed. It then **stays due** until it has received a
   backup from its source. After receiving one, it calculates its next run.
@@ -122,11 +122,11 @@ grandfather–father–son (GFS) chain:
 </p>
 
 The **GFS extended** template works like this: 24 hourly → 7 daily → 4 weekly → 6 monthly = 41 backups covering half a
-year. Backup Plus checks that a chain always starts at a *create* routine and never loops back on itself.
+year. Backups Plus checks that a chain always starts at a *create* routine and never loops back on itself.
 
 ## Backups that are never touched
 
-Backup Plus is careful about what it deletes. It never deletes:
+Backups Plus is careful about what it deletes. It never deletes:
 
 - **Manual backups** — only backups in its own group are managed.
 - **Pinned backups** — use *Pin (never delete)* in the backup's menu. Pinning uses the panel's normal backup lock.
@@ -138,20 +138,20 @@ Backup Plus is careful about what it deletes. It never deletes:
 
 ## The managed backup group
 
-On first use, Backup Plus creates a backup group named **Backup Plus (auto)** on the server. All automatic backups go
+On first use, Backups Plus creates a backup group named **Backups Plus (auto)** on the server. All automatic backups go
 there, so they are clearly separated from manual backups in the panel's normal **Backups** page. The group has the
-panel's own retention switched off — Backup Plus is the only thing that rotates it. If you delete the group, Backup Plus
+panel's own retention switched off — Backups Plus is the only thing that rotates it. If you delete the group, Backups Plus
 creates a new one on the next run.
 
 ## Time zones
 
-Schedules, and the dates in backup names, use the server's time zone. Backup Plus takes the first one that is set:
+Schedules, and the dates in backup names, use the server's time zone. Backups Plus takes the first one that is set:
 
 | Order | Source | Where to change it |
 | :---: | --- | --- |
 | 1 | **Server** — the time zone set for the server | Server → **Settings → Time zone** |
 | 2 | **Node** — the system time zone the node (Wings) reports; this is what the server itself uses without its own setting | Node configuration |
-| 3 | **Backup Plus default** — set by the admin | Admin → Extensions → Backup Plus → *Default time zone* |
+| 3 | **Backups Plus default** — set by the admin | Admin → Extensions → Backups Plus → *Default time zone* |
 | 4 | **UTC** — when none of the above is available | |
 
 The *Status* card on the Auto-Backups tab shows the time zone in use and where it comes from. If it falls back to UTC,
@@ -160,7 +160,7 @@ preview uses it too. Daylight-saving changes are handled automatically.
 
 > [!TIP]
 > Your schedules run an hour off? The server most likely has no time zone and falls back to UTC. Set it under
-> **Settings → Time zone** on the server (e.g. `Europe/Berlin`) — Backup Plus picks it up immediately.
+> **Settings → Time zone** on the server (e.g. `Europe/Berlin`) — Backups Plus picks it up immediately.
 
 ---
 

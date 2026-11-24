@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/banner.svg" alt="Backup Plus – configurable, rotating server backups for the Calagopus panel" width="100%">
+  <img src=".github/assets/banner.svg" alt="Backups Plus – configurable, rotating server backups for the Calagopus panel" width="100%">
 </p>
 
 <p align="center">
@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <b>Set up your backup strategy once — Backup Plus creates, rotates and cleans up your server backups for you.</b>
+  <b>Set up your backup strategy once — Backups Plus creates, rotates and cleans up your server backups for you.</b>
 </p>
 
 <p align="center">
@@ -25,9 +25,9 @@
 
 ---
 
-## Why Backup Plus?
+## Why Backups Plus?
 
-The Calagopus panel can create backups, but keeping *the right ones* is up to you. Backup Plus turns backups into
+The Calagopus panel can create backups, but keeping *the right ones* is up to you. Backups Plus turns backups into
 **routines**: you decide when backups are made, how many of each kind to keep and how long to keep them. Everything
 older is removed automatically, so you never run out of backup slots and never lose the backup you actually need.
 
@@ -106,8 +106,8 @@ routines (hourly → daily → weekly → monthly).
 <td valign="top">
 
 ### 🔐 Permissions
-- `backup-plus.read` — view routines, backups and the log
-- `backup-plus.manage` — change routines, apply templates, run backups, pin backups
+- `backups-plus.read` — view routines, backups and the log
+- `backups-plus.manage` — change routines, apply templates, run backups, pin backups
 - Admin pages use the panel's `extensions.read` / `extensions.manage`
 
 </td>
@@ -137,13 +137,13 @@ routines (hourly → daily → weekly → monthly).
 
 **Docker (`:heavy` image)**
 
-1. Download `dev_backupplus_gfsbackups.c7s.zip` from the [latest release](https://github.com/Luis-1805/calagopus-backup-plus/releases/latest).
+1. Download `dev_backupsplus_backups.c7s.zip` from the [latest release](https://github.com/Luis-1805/calagopus-backup-plus/releases/latest).
 2. In the panel, go to **Admin → Extensions** and upload the file. The panel builds and loads it (usually 1–2 minutes).
 
 **Development environment**
 
 ```bash
-panel-rs extensions add dev_backupplus_gfsbackups.c7s.zip
+panel-rs extensions add dev_backupsplus_backups.c7s.zip
 panel-rs extensions apply --profile balanced
 ```
 
@@ -177,6 +177,19 @@ The **[full guide](docs/README.md)** explains every feature in detail:
 | 🔌 [API](docs/api.md) | All endpoints with examples |
 | 🔍 [How it works](docs/how-it-works.md) | Background task, algorithm, data model, translations |
 
+## Upgrading from "Backup Plus" (2.3 and older)
+
+Version 2.4 renamed the extension to **Backups Plus** with the new package ID `dev.backupsplus.backups` (before:
+`dev.backupplus.gfsbackups`). The panel treats it as a different extension, so upgrade like this:
+
+1. **Admin → Extensions:** delete the old *Backup Plus* extension with **"remove migrations" switched off** — otherwise
+   its tables and all routines are dropped.
+2. Upload the new `.c7s.zip` and let the panel rebuild once.
+
+On the first start, a migration takes everything over: tables, settings, granted permissions (subusers, roles, API
+keys), the backup group name and the old migration records. Routines, backups and logs stay as they are. If both
+extensions are installed at the same time, Backups Plus pauses automatic backups until the old one is removed.
+
 ## Upgrading from 1.x
 
 Version 2 replaces the fixed hourly/daily/weekly/monthly tiers with free-form routines. Your existing settings are
@@ -184,12 +197,12 @@ migrated automatically into equivalent routines, and existing backups keep their
 
 ## Development
 
-- **Backend:** Rust. A cron task (`backup_plus_tick`) runs every minute on the primary instance and uses the panel's own
+- **Backend:** Rust. A cron task (`backups_plus_tick`) runs every minute on the primary instance and uses the panel's own
   models (`ServerBackup::create` / `delete`, `ServerBackupGroup`), so it works with every backup storage driver
   (local, S3, restic, Kopia, …).
 - **Frontend:** React + Mantine, mounted as a server route and an admin configuration page.
-- **Database tables:** `backup_plus_policies`, `backup_plus_routines`, `backup_plus_backups`, `backup_plus_log`.
-- **Tests:** `cargo test -p dev_backupplus_gfsbackups` — includes a 90-day simulation of the default template with real
+- **Database tables:** `backups_plus_policies`, `backups_plus_routines`, `backups_plus_backups`, `backups_plus_log`.
+- **Tests:** `cargo test -p dev_backupsplus_backups` — includes a 90-day simulation of the default template with real
   cron schedules and time zones.
 
 Project layout (the same as inside the `.c7s.zip`):
@@ -205,7 +218,7 @@ Metadata.toml  Extension metadata
 
 | Part | Where | Notes |
 | --- | --- | --- |
-| Interface | `frontend/src/translations.ts` (English base) + `frontend/public/translations/<lang>/dev.backupplus.gfsbackups.json` | Uses the panel's translation system |
+| Interface | `frontend/src/translations.ts` (English base) + `frontend/public/translations/<lang>/dev.backupsplus.backups.json` | Uses the panel's translation system |
 | Errors, run log, built-in templates | `backend/src/i18n.rs` | Rendered in the requesting user's language; the log stores message keys, so every user reads it in their own language |
 
 To add a language, copy the German JSON file, translate the values and add the matching entries in `i18n.rs`.

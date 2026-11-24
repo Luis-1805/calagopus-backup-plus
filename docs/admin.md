@@ -2,7 +2,7 @@
 
 [← Guide overview](README.md)
 
-Open the admin page via **Admin → Extensions → Backup Plus → Configure**. Viewing requires the panel permission
+Open the admin page via **Admin → Extensions → Backups Plus → Configure**. Viewing requires the panel permission
 `extensions.read`, changing anything requires `extensions.manage`.
 
 - [Overview](#overview)
@@ -10,18 +10,18 @@ Open the admin page via **Admin → Extensions → Backup Plus → Configure**. 
 - [Templates](#templates)
 - [Apply a template to servers](#apply-a-template-to-servers)
 - [Permissions](#permissions)
-- [Rolling out Backup Plus on a large panel](#rolling-out-backup-plus-on-a-large-panel)
+- [Rolling out Backups Plus on a large panel](#rolling-out-backups-plus-on-a-large-panel)
 - [Activity log events](#activity-log-events)
 
 ## Overview
 
 | Figure | Meaning |
 | --- | --- |
-| **Servers set up** | Servers that have Backup Plus settings (active or paused) |
+| **Servers set up** | Servers that have Backups Plus settings (active or paused) |
 | **of which active** | Servers with *Automatic backups active* switched on |
 | **Routines** | Routines across all servers |
 | **with errors** | Active servers where at least one routine's last run failed |
-| **Managed backups** | Backups in the Backup Plus groups of all servers |
+| **Managed backups** | Backups in the Backups Plus groups of all servers |
 | **Storage** | Total size of those backups |
 
 The extension card in the extension list shows a one-line version of this.
@@ -30,7 +30,7 @@ The extension card in the extension list shows a one-line version of this.
 
 | Setting | Default | Range | What it does |
 | --- | :---: | :---: | --- |
-| **Backup Plus active** | on | | Main switch. Off: no backups are created or deleted on any server. Servers show a *Disabled globally* notice. Settings and routines are kept. |
+| **Backups Plus active** | on | | Main switch. Off: no backups are created or deleted on any server. Servers show a *Disabled globally* notice. Settings and routines are kept. |
 | **Allow custom routines** | on | | Off: server users can only apply templates; the routine editor becomes read-only. Users with the admin permission `extensions.manage` can always edit routines. |
 | **Default template** | GFS compact | | Preselected in the template list of servers that aren't set up yet. |
 | **Default time zone** | empty (UTC) | any IANA time zone | Used for servers that have no time zone of their own and whose node doesn't report one. See [Time zones](concepts.md#time-zones). |
@@ -82,12 +82,12 @@ Each affected server gets a log entry *Template "…" applied by an administrato
 
 ## Permissions
 
-**Server permissions** (in the *Backup Plus* group of the subuser permission picker):
+**Server permissions** (in the *Backups Plus* group of the subuser permission picker):
 
 | Permission | Allows |
 | --- | --- |
-| `backup-plus.read` | Viewing the Auto-Backups tab |
-| `backup-plus.manage` | Changing settings and routines, applying templates, manual runs, pinning and assigning backups |
+| `backups-plus.read` | Viewing the Auto-Backups tab |
+| `backups-plus.manage` | Changing settings and routines, applying templates, manual runs, pinning and assigning backups |
 
 **Admin permissions** (existing panel permissions):
 
@@ -98,7 +98,7 @@ Each affected server gets a log entry *Template "…" applied by an administrato
 
 API keys follow the same permissions — see [API](api.md).
 
-## Rolling out Backup Plus on a large panel
+## Rolling out Backups Plus on a large panel
 
 1. **Raise backup limits first.** Each server needs a backup limit of at least the template's total + 1.
 2. **Decide on the default.** Use a built-in template or create a custom one (e.g. *Nightly, 7 days* for low-cost
@@ -112,19 +112,19 @@ API keys follow the same permissions — see [API](api.md).
 
 ## Activity log events
 
-Backup Plus writes the following events to the panel's activity logs:
+Backups Plus writes the following events to the panel's activity logs:
 
 | Event | Log | When |
 | --- | --- | --- |
-| `server:backup.create` | Server | Backup created by a routine (`"source": "backup-plus"`, with routine name) |
-| `server:backup.delete` | Server | Backup deleted by rotation (`"source": "backup-plus"`, with reason) |
-| `server:backup-plus.update` | Server | Settings or routines saved |
-| `server:backup-plus.apply-template` | Server | Template applied on the server page |
-| `server:backup-plus.run` | Server | *Back up now* / *Run now* |
-| `server:backup-plus.pin` | Server | Backup pinned or unpinned |
-| `backup-plus:settings.update` | Admin | Global settings saved |
-| `backup-plus:templates.update` | Admin | Custom templates saved |
-| `backup-plus:templates.apply` | Admin | Template applied to servers |
+| `server:backup.create` | Server | Backup created by a routine (`"source": "backups-plus"`, with routine name) |
+| `server:backup.delete` | Server | Backup deleted by rotation (`"source": "backups-plus"`, with reason) |
+| `server:backups-plus.update` | Server | Settings or routines saved |
+| `server:backups-plus.apply-template` | Server | Template applied on the server page |
+| `server:backups-plus.run` | Server | *Back up now* / *Run now* |
+| `server:backups-plus.pin` | Server | Backup pinned or unpinned |
+| `backups-plus:settings.update` | Admin | Global settings saved |
+| `backups-plus:templates.update` | Admin | Custom templates saved |
+| `backups-plus:templates.apply` | Admin | Template applied to servers |
 
 ---
 

@@ -18,8 +18,17 @@ CREATE TABLE IF NOT EXISTS backup_plus_policies (
     updated TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC')
 );
 
-CREATE INDEX IF NOT EXISTS backup_plus_policies_enabled_next_run_idx
-    ON backup_plus_policies (enabled, next_run);
+-- Die Spalte next_run gibt es seit v2 nicht mehr; bei einem erneuten Durchlauf den Index überspringen.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'backup_plus_policies' AND column_name = 'next_run'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS backup_plus_policies_enabled_next_run_idx
+            ON backup_plus_policies (enabled, next_run);
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS backup_plus_backups (
     backup_uuid UUID PRIMARY KEY REFERENCES server_backups(uuid) ON DELETE CASCADE,

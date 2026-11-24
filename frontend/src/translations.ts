@@ -32,7 +32,7 @@ const translations = defineTranslations({
       overKeep: 'older than the {keep} newest backups of routine "{routine}"',
     },
     server: {
-      version: 'Backup Plus · interface v{frontend} · installed v{installed}',
+      version: 'Backups Plus · interface v{frontend} · installed v{installed}',
       title: 'Auto-Backups',
       button: {
         runNow: 'Back up now',
@@ -44,7 +44,7 @@ const translations = defineTranslations({
       alert: {
         globallyDisabledTitle: 'Disabled globally',
         globallyDisabled:
-          'An administrator has paused Backup Plus. No automatic backups are currently created or deleted.',
+          'An administrator has paused Backups Plus. No automatic backups are currently created or deleted.',
         lastRunFailed: 'Last run failed',
         routineError: 'Routine "{name}"',
         limitTooLow:
@@ -65,7 +65,7 @@ const translations = defineTranslations({
         timezoneSource: {
           server: 'from the server settings',
           node: 'default of the node',
-          extension: 'Backup Plus default',
+          extension: 'Backups Plus default',
           fallback: 'fallback, nothing configured',
         },
         managed: 'Managed backups',
@@ -177,7 +177,7 @@ const translations = defineTranslations({
       },
       settings: {
         title: 'Global settings',
-        enabled: 'Backup Plus active',
+        enabled: 'Backups Plus active',
         enabledDescription: 'Main switch for all servers.',
         allowCustom: 'Allow custom routines',
         allowCustomDescription: 'Off: server users can only apply templates (admins always can).',

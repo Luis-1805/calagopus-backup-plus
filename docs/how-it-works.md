@@ -14,12 +14,12 @@ A look under the hood — for admins who want to know exactly what runs when, an
 
 ## The background task
 
-Backup Plus registers one cron task, `backup_plus_tick`, that runs **every minute** (UTC) on the panel's **primary**
+Backups Plus registers one cron task, `backups_plus_tick`, that runs **every minute** (UTC) on the panel's **primary**
 instance (`APP_PRIMARY=true`).
 
 Every tick:
 
-1. If Backup Plus is disabled globally, stop.
+1. If Backups Plus is disabled globally, stop.
 2. Find all **active** servers that have an active *create* routine whose next run has passed, oldest last run first.
 3. Process up to *Max. servers per minute* of them (see [below](#a-scheduled-run-step-by-step)). The rest wait for the
    next minute.
@@ -34,7 +34,7 @@ Errors in one server never stop the others; they are written to that server's lo
 
 ## A scheduled run, step by step
 
-1. Load the server, its settings and routines. Create the *Backup Plus (auto)* group if it's missing.
+1. Load the server, its settings and routines. Create the *Backups Plus (auto)* group if it's missing.
 2. **Rotate** (see below).
 3. Pick the first due, active *create* routine.
 4. **Safety checks** — skip (and log) if the server is suspended, installing, restoring or transferring. If an
@@ -84,10 +84,10 @@ removed the same way as when you delete a backup by hand. Locked backups are che
 
 | Table | Content |
 | --- | --- |
-| `backup_plus_policies` | One row per server: on/off, *delete failed*, the managed backup group, last run and last error |
-| `backup_plus_routines` | Routines: name, schedule, type, source, keep, max. age, name template, ignored files, next/last run, last error |
-| `backup_plus_backups` | Which routine a backup belongs to (references the panel's `server_backups`) |
-| `backup_plus_log` | Per-server log; messages are stored as translation keys with parameters |
+| `backups_plus_policies` | One row per server: on/off, *delete failed*, the managed backup group, last run and last error |
+| `backups_plus_routines` | Routines: name, schedule, type, source, keep, max. age, name template, ignored files, next/last run, last error |
+| `backups_plus_backups` | Which routine a backup belongs to (references the panel's `server_backups`) |
+| `backups_plus_log` | Per-server log; messages are stored as translation keys with parameters |
 
 All tables reference the panel's `servers` table and are cleaned up automatically when a server is deleted. Global
 settings and custom templates are stored with the panel's extension settings.
@@ -99,7 +99,7 @@ settings (fixed hourly/daily/weekly/monthly tiers) into equivalent routines.
 
 | Part | Where | How it's rendered |
 | --- | --- | --- |
-| Interface | `frontend/src/translations.ts` (English base) and `frontend/public/translations/<lang>/dev.backupplus.gfsbackups.json` | The panel's translation system, in the viewer's language |
+| Interface | `frontend/src/translations.ts` (English base) and `frontend/public/translations/<lang>/dev.backupsplus.backups.json` | The panel's translation system, in the viewer's language |
 | Errors, validation, delete reasons, log, built-in templates | `backend/src/i18n.rs` | On the server, in the language of the user making the request |
 
 The log stores keys and parameters instead of finished sentences, so the same entry is shown in English to one user and
@@ -138,20 +138,20 @@ migrations/                       SQL migrations
 
 ## Building and testing
 
-Backup Plus is built like any Calagopus extension (see the
+Backups Plus is built like any Calagopus extension (see the
 [panel's development guide](https://calagopus.com/docs/panel/extensions/dev-environment)). Place the repository
-contents in `backend-extensions/dev_backupplus_gfsbackups/` of a panel checkout, then:
+contents in `backend-extensions/dev_backupsplus_backups/` of a panel checkout, then:
 
 ```bash
 # backend: compile, lint, test
-SQLX_OFFLINE=true cargo clippy -p dev_backupplus_gfsbackups --tests
-SQLX_OFFLINE=true cargo test -p dev_backupplus_gfsbackups
+SQLX_OFFLINE=true cargo clippy -p dev_backupsplus_backups --tests
+SQLX_OFFLINE=true cargo test -p dev_backupsplus_backups
 
 # frontend: type-check (from the panel's frontend/ directory)
 pnpm typecheck
 
 # package
-panel-rs extensions export dev.backupplus.gfsbackups
+panel-rs extensions export dev.backupsplus.backups
 ```
 
 The test suite includes unit tests for rotation, schedules and translations, plus simulations that run the built-in

@@ -17,7 +17,7 @@ use shared::{
     },
 };
 
-pub const GROUP_NAME: &str = "Backup Plus (auto)";
+pub const GROUP_NAME: &str = "Backups Plus (auto)";
 
 /// Laufende Backups, die älter sind, gelten als hängengeblieben und blockieren nicht mehr.
 const STUCK_AFTER_HOURS: i64 = 6;
@@ -39,7 +39,7 @@ pub enum Trigger {
 /// Wird jede Minute vom Hintergrund-Task aufgerufen.
 pub async fn tick(state: State) -> Result<(), anyhow::Error> {
     let settings = settings::load(&state).await;
-    if !settings.enabled {
+    if !settings.enabled || crate::legacy::old_extension_active(&state).await {
         return Ok(());
     }
 
@@ -55,7 +55,7 @@ pub async fn tick(state: State) -> Result<(), anyhow::Error> {
         handled.insert(server_uuid);
 
         if let Err(err) = run_server(&state, server_uuid, Trigger::Scheduled).await {
-            tracing::error!(server = %server_uuid, "backup-plus: run failed: {err:#?}");
+            tracing::error!(server = %server_uuid, "backups-plus: run failed: {err:#?}");
             models::write_log(&state.database, server_uuid, "error", Msg::from_error(&err)).await;
         }
     }
@@ -69,7 +69,7 @@ pub async fn tick(state: State) -> Result<(), anyhow::Error> {
             }
 
             if let Err(err) = run_retention(&state, server_uuid).await {
-                tracing::warn!(server = %server_uuid, "backup-plus: rotation failed: {err:#?}");
+                tracing::warn!(server = %server_uuid, "backups-plus: rotation failed: {err:#?}");
             }
         }
 
@@ -457,7 +457,7 @@ async fn create_backup(
         server_uuid,
         "server:backup.create",
         serde_json::json!({
-            "source": "backup-plus",
+            "source": "backups-plus",
             "uuid": backup.uuid,
             "name": backup.name,
             "routine": routine.name,
@@ -668,7 +668,7 @@ async fn delete_backup(
         server_uuid,
         "server:backup.delete",
         serde_json::json!({
-            "source": "backup-plus",
+            "source": "backups-plus",
             "uuid": backup.uuid,
             "name": backup.name,
             "reason": reason,
@@ -696,7 +696,7 @@ async fn log_activity(state: &State, server_uuid: uuid::Uuid, event: &str, data:
     )
     .await
     {
-        tracing::warn!(server = %server_uuid, "backup-plus: failed to log activity: {err:#?}");
+        tracing::warn!(server = %server_uuid, "backups-plus: failed to log activity: {err:#?}");
     }
 }
 

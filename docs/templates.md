@@ -79,7 +79,7 @@ Admins can also apply a template to **many servers at once** — see [Administra
 
 ## Custom templates
 
-Admins can create their own templates on the admin page (**Admin → Extensions → Backup Plus → Configure → Templates**):
+Admins can create their own templates on the admin page (**Admin → Extensions → Backups Plus → Configure → Templates**):
 
 - **New template** starts with a single hourly routine.
 - **Copy as custom template** on a built-in template creates an editable copy.

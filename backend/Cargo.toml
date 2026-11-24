@@ -1,6 +1,6 @@
 [package]
-name = "dev_backupplus_gfsbackups"
-description = "Automatische Server-Backups mit GFS-Rotation (stündlich/täglich/wöchentlich/monatlich) und automatischer Bereinigung."
+name = "dev_backupsplus_backups"
+description = "Automatic server backups with freely configurable routines, rotation and cleanup."
 authors = ["Luis-1805"]
 version = "2.3.0"
 edition = { workspace = true }

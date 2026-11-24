@@ -13,9 +13,9 @@ need time to accumulate — you can stop in between and come back.
 
 **What you need:**
 
-- Backup Plus installed ([Getting started](getting-started.md#2-install-the-extension))
+- Backups Plus installed ([Getting started](getting-started.md#2-install-the-extension))
 - A server where the panel can already create backups (try one manual backup on the **Backups** page first)
-- Access to the server's **Auto-Backups** tab with the `backup-plus.manage` permission
+- Access to the server's **Auto-Backups** tab with the `backups-plus.manage` permission
 
 ---
 
@@ -263,7 +263,7 @@ span.
 
 ## Part 6 — The backup limit
 
-Every server has a **backup limit**: the maximum number of backups it may have. Backup Plus never exceeds it, and
+Every server has a **backup limit**: the maximum number of backups it may have. Backups Plus never exceeds it, and
 **all** backups count — including manual ones.
 
 Do the math for your strategy:
@@ -440,7 +440,7 @@ for more than 30 days.
 <details>
 <summary>Answer</summary>
 
-Trick question — it works! The order of the cards doesn't matter for chains: Backup Plus always processes a source
+Trick question — it works! The order of the cards doesn't matter for chains: Backups Plus always processes a source
 before the routines that take over from it. *Weekly* fills up once *Daily* has 7 backups and starts passing them on —
 that takes a week. If after two weeks *Weekly* is still empty, check that *Daily* is **Active**.
 

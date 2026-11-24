@@ -157,12 +157,12 @@ pub async fn load(state: &shared::State) -> ExtensionSettingsData {
         Ok(settings) => match settings.find_extension_settings::<ExtensionSettingsData>() {
             Ok(data) => data.clone(),
             Err(err) => {
-                tracing::warn!("backup-plus: settings not found: {err:#?}");
+                tracing::warn!("backups-plus: settings not found: {err:#?}");
                 ExtensionSettingsData::default()
             }
         },
         Err(err) => {
-            tracing::warn!("backup-plus: failed to load settings: {err:#?}");
+            tracing::warn!("backups-plus: failed to load settings: {err:#?}");
             ExtensionSettingsData::default()
         }
     }

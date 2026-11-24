@@ -263,7 +263,7 @@ export default function ServerPage() {
     <ServerContentContainer
       title={tExt('server.title', {})}
       contentRight={
-        <ServerCan action='backup-plus.manage'>
+        <ServerCan action='backups-plus.manage'>
           <Button
             leftSection={<FontAwesomeIcon icon={faBolt} />}
             loading={running === 'any'}
@@ -357,7 +357,7 @@ export default function ServerPage() {
           </TitleCard>
         </SimpleGrid>
 
-        <ServerCan action='backup-plus.manage'>
+        <ServerCan action='backups-plus.manage'>
           <TitleCard title={tExt('server.setup.title', {})} icon={faGear}>
             <Stack>
               <Group align='flex-end' wrap='wrap'>
@@ -440,7 +440,7 @@ export default function ServerPage() {
                       })}
                     </Text>
                     {saved.source === 'create' && (
-                      <ServerCan action='backup-plus.manage'>
+                      <ServerCan action='backups-plus.manage'>
                         <Button
                           size='compact-xs'
                           variant='subtle'
@@ -455,7 +455,7 @@ export default function ServerPage() {
                 );
               }}
             />
-            <ServerCan action='backup-plus.manage'>
+            <ServerCan action='backups-plus.manage'>
               <Group>
                 <Button loading={saving} disabled={!dirty} onClick={doSave}>
                   {tExt('server.button.save', {})}
@@ -516,7 +516,7 @@ export default function ServerPage() {
                         </Table.Td>
                         <Table.Td>{plannedBadge(backup.planned)}</Table.Td>
                         <Table.Td>
-                          <ServerCan action='backup-plus.manage'>
+                          <ServerCan action='backups-plus.manage'>
                             <Menu position='bottom-end' withinPortal>
                               <Menu.Target>
                                 <ActionIcon variant='subtle' aria-label={tExt('server.backups.actions', {})}>

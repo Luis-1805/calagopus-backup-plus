@@ -13,8 +13,8 @@ import {
   templateSchema,
 } from './lib/schemas.ts';
 
-const ADMIN_BASE = '/api/admin/extensions/dev.backupplus.gfsbackups';
-const serverBase = (uuid: string) => `/api/client/servers/${uuid}/backup-plus`;
+const ADMIN_BASE = '/api/admin/extensions/dev.backupsplus.backups';
+const serverBase = (uuid: string) => `/api/client/servers/${uuid}/backups-plus`;
 
 export async function getOverview(serverUuid: string): Promise<Overview> {
   const { data } = await axiosInstance.get(serverBase(serverUuid));

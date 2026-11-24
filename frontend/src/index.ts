@@ -6,7 +6,7 @@ import CardSummary from './CardSummary.tsx';
 import ServerPage from './ServerPage.tsx';
 import { getExtTranslations } from './translations.ts';
 
-class DevBackupplusGfsbackupsExtension extends Extension {
+class DevBackupsplusBackupsExtension extends Extension {
   public cardConfigurationPage: React.FC | null = AdminPage;
   public cardComponent: React.FC | null = CardSummary;
   public cardPreviewComponent: React.FC | null = null;
@@ -17,14 +17,14 @@ class DevBackupplusGfsbackupsExtension extends Extension {
       routes.addServerRoute({
         name: () => getExtTranslations().t('server.title', {}),
         icon: faClockRotateLeft,
-        path: '/backup-plus',
+        path: '/backups-plus',
         element: ServerPage,
-        permission: 'backup-plus.read',
+        permission: 'backups-plus.read',
       }),
     );
 
-    ctx.extensionRegistry.permissionIcons.addServerPermissionIcon('backup-plus', faClockRotateLeft);
+    ctx.extensionRegistry.permissionIcons.addServerPermissionIcon('backups-plus', faClockRotateLeft);
   }
 }
 
-export default new DevBackupplusGfsbackupsExtension();
+export default new DevBackupsplusBackupsExtension();

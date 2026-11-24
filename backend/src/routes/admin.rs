@@ -1,4 +1,4 @@
-//! Routen unter `/api/admin/extensions/dev.backupplus.gfsbackups`.
+//! Routen unter `/api/admin/extensions/dev.backupsplus.backups`.
 
 use shared::State;
 use utoipa_axum::router::OpenApiRouter;
@@ -147,7 +147,7 @@ mod settings {
 
             activity_logger
                 .log(
-                    "backup-plus:settings.update",
+                    "backups-plus:settings.update",
                     serde_json::to_value(&data).unwrap_or_default(),
                 )
                 .await;
@@ -305,7 +305,7 @@ mod templates {
 
             activity_logger
                 .log(
-                    "backup-plus:templates.update",
+                    "backups-plus:templates.update",
                     serde_json::json!({ "templates": custom.iter().map(|t| &t.id).collect::<Vec<_>>() }),
                 )
                 .await;
@@ -434,7 +434,7 @@ mod apply_template {
 
             activity_logger
                 .log(
-                    "backup-plus:templates.apply",
+                    "backups-plus:templates.apply",
                     serde_json::json!({
                         "template": template.id,
                         "applied": applied,

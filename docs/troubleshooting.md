@@ -26,7 +26,7 @@ At the bottom of the Auto-Backups tab you see two versions: the **interface** yo
 
 Work through this list:
 
-1. **Is Backup Plus active globally?** A yellow *Disabled globally* alert on the server page means an admin switched it
+1. **Is Backups Plus active globally?** A yellow *Disabled globally* alert on the server page means an admin switched it
    off ([Global settings](admin.md#global-settings)).
 2. **Is the server active?** The *Status* card must say **Active**. If not, switch on *Automatic backups active* and
    click **Save**.
@@ -35,7 +35,7 @@ Work through this list:
    zone.
 5. **Check the log** at the bottom of the page — skipped runs and errors are recorded there.
 6. **Can the panel back up this server at all?** Try a manual backup on the panel's **Backups** page. If that fails
-   (no backup configuration, node offline, configuration in maintenance mode), Backup Plus can't succeed either.
+   (no backup configuration, node offline, configuration in maintenance mode), Backups Plus can't succeed either.
 7. **Multiple panel instances?** Automatic runs happen on the panel's *primary* instance only. Make sure one instance has
    `APP_PRIMARY` enabled.
 
@@ -43,8 +43,8 @@ Work through this list:
 
 > *The server's backup limit has been reached (6/6). Raise the limit to at least 7 or keep fewer backups.*
 
-Before every backup, Backup Plus checks the server's backup limit. All backups count — including manual ones and pinned
-ones. If the limit is reached, Backup Plus first tries to free one slot by rotating out the oldest backup of the routine
+Before every backup, Backups Plus checks the server's backup limit. All backups count — including manual ones and pinned
+ones. If the limit is reached, Backups Plus first tries to free one slot by rotating out the oldest backup of the routine
 that is about to run. If that isn't possible (e.g. all other backups are manual or pinned), the run fails with this
 message.
 
@@ -108,17 +108,17 @@ own retries.
 
 ## FAQ
 
-**Does Backup Plus work with S3 / restic / Kopia / …?**
+**Does Backups Plus work with S3 / restic / Kopia / …?**
 Yes. It uses the panel's own backup functions, so every storage driver the panel supports works.
 
 **Does it back up databases?**
-It creates normal server backups (the server's files). Database instance backups are not part of Backup Plus.
+It creates normal server backups (the server's files). Database instance backups are not part of Backups Plus.
 
 **Are my manual backups safe?**
-Yes. Backup Plus only manages backups in its own *Backup Plus (auto)* group.
+Yes. Backups Plus only manages backups in its own *Backups Plus (auto)* group.
 
-**What happens when I uninstall Backup Plus?**
-Nothing is deleted. The backups stay in the *Backup Plus (auto)* group and can be managed manually.
+**What happens when I uninstall Backups Plus?**
+Nothing is deleted. The backups stay in the *Backups Plus (auto)* group and can be managed manually.
 
 **Can I restore an automatic backup?**
 Yes — on the panel's normal **Backups** page, like any other backup.
@@ -139,13 +139,13 @@ may be deleted on the next rotation if *Keep* is 1.
 A new backup is being created or has just finished; the next rotation (within 5 minutes) removes the one that fell out.
 
 **In which time zone do schedules run?**
-The server's time zone; if it has none, the node's time zone, then the admin's Backup Plus default, then UTC (see
+The server's time zone; if it has none, the node's time zone, then the admin's Backups Plus default, then UTC (see
 [Time zones](concepts.md#time-zones)). The *Status* card shows which one is used. Times in the UI are shown in your
 browser's local time.
 
 **My schedules run an hour off / the time zone shows UTC.**
 The server has no time zone of its own and its node reports none. Set it under the server's **Settings → Time zone**
-(e.g. `Europe/Berlin`), or ask the admin to set a *Default time zone* for Backup Plus.
+(e.g. `Europe/Berlin`), or ask the admin to set a *Default time zone* for Backups Plus.
 
 **Which languages are supported?**
 English and German. Everything follows the language you selected in your panel account settings.

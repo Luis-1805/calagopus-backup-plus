@@ -44,7 +44,7 @@
       "overKeep": "älter als die {keep} neuesten Backups der Routine \"{routine}\""
     },
     "server": {
-      "version": "Backup Plus · Oberfläche v{frontend} · installiert v{installed}",
+      "version": "Backups Plus · Oberfläche v{frontend} · installiert v{installed}",
       "title": "Auto-Backups",
       "button": {
         "runNow": "Jetzt sichern",
@@ -55,7 +55,7 @@
       },
       "alert": {
         "globallyDisabledTitle": "Global deaktiviert",
-        "globallyDisabled": "Ein Administrator hat Backup Plus pausiert. Es werden derzeit keine automatischen Backups erstellt oder gelöscht.",
+        "globallyDisabled": "Ein Administrator hat Backups Plus pausiert. Es werden derzeit keine automatischen Backups erstellt oder gelöscht.",
         "lastRunFailed": "Letzter Lauf fehlgeschlagen",
         "routineError": "Routine „{name}“",
         "limitTooLow": "Das Backup-Limit dieses Servers ({limit}) ist kleiner als die Summe der behaltenen Backups ({total}). Bitte einen Administrator, das Limit zu erhöhen (empfohlen: {recommended}).",
@@ -79,7 +79,7 @@
         "timezoneSource": {
           "server": "aus den Server-Einstellungen",
           "node": "Standard des Nodes",
-          "extension": "Backup-Plus-Standard",
+          "extension": "Backups-Plus-Standard",
           "fallback": "Notlösung, nichts eingestellt"
         }
       },
@@ -182,7 +182,7 @@
       },
       "settings": {
         "title": "Globale Einstellungen",
-        "enabled": "Backup Plus aktiv",
+        "enabled": "Backups Plus aktiv",
         "enabledDescription": "Hauptschalter für alle Server.",
         "allowCustom": "Eigene Routinen erlauben",
         "allowCustomDescription": "Aus: Server-Nutzer können nur Vorlagen anwenden (Admins dürfen immer).",
