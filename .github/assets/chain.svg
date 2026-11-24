@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" role="img" aria-label="Chain of routines: Hourly keeps 24, Daily takes over and keeps 7, Weekly takes over from Daily and keeps 4, Monthly takes over from Weekly and keeps 6. Anything no routine takes over is deleted.">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#94a3b8"/>
+    </marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#f87171"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", Helvetica, Arial, sans-serif; }
+    .t { font-size: 22px; font-weight: 700; }
+    .k { font-size: 16px; fill: #cbd5e1; }
+    .s { font-size: 14px; fill: #94a3b8; }
+  </style>
+
+  <rect width="1280" height="300" rx="24" fill="#0f172a"/>
+
+  <g transform="translate(48 60)">
+    <rect width="230" height="110" rx="14" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+    <text x="22" y="40" class="t" fill="#7dd3fc">Hourly</text>
+    <text x="22" y="68" class="k">creates every hour</text>
+    <text x="22" y="92" class="k">keeps 24</text>
+  </g>
+  <g transform="translate(358 60)">
+    <rect width="230" height="110" rx="14" fill="#1e293b" stroke="#2dd4bf" stroke-width="2"/>
+    <text x="22" y="40" class="t" fill="#5eead4">Daily</text>
+    <text x="22" y="68" class="k">takes over at 00:00</text>
+    <text x="22" y="92" class="k">keeps 7</text>
+  </g>
+  <g transform="translate(668 60)">
+    <rect width="230" height="110" rx="14" fill="#1e293b" stroke="#a78bfa" stroke-width="2"/>
+    <text x="22" y="40" class="t" fill="#c4b5fd">Weekly</text>
+    <text x="22" y="68" class="k">takes over on Mondays</text>
+    <text x="22" y="92" class="k">keeps 4</text>
+  </g>
+  <g transform="translate(978 60)">
+    <rect width="254" height="110" rx="14" fill="#1e293b" stroke="#fb923c" stroke-width="2"/>
+    <text x="22" y="40" class="t" fill="#fdba74">Monthly</text>
+    <text x="22" y="68" class="k">takes over on the 1st</text>
+    <text x="22" y="92" class="k">keeps 6</text>
+  </g>
+
+  <g stroke="#94a3b8" stroke-width="2.5" fill="none">
+    <path d="M278 115 H 352" marker-end="url(#a)"/>
+    <path d="M588 115 H 662" marker-end="url(#a)"/>
+    <path d="M898 115 H 972" marker-end="url(#a)"/>
+  </g>
+  <g class="s">
+    <text x="315" y="104" text-anchor="middle">falls out</text>
+    <text x="625" y="104" text-anchor="middle">falls out</text>
+    <text x="935" y="104" text-anchor="middle">falls out</text>
+  </g>
+
+  <g stroke="#f87171" stroke-width="2" fill="none" stroke-dasharray="6 5">
+    <path d="M163 170 V 222" marker-end="url(#r)"/>
+    <path d="M473 170 V 222" marker-end="url(#r)"/>
+    <path d="M783 170 V 222" marker-end="url(#r)"/>
+    <path d="M1105 170 V 222" marker-end="url(#r)"/>
+  </g>
+  <g font-size="15" fill="#fca5a5" text-anchor="middle">
+    <text x="163" y="246">not due → deleted</text>
+    <text x="473" y="246">not due → deleted</text>
+    <text x="783" y="246">not due → deleted</text>
+    <text x="1105" y="246">end of chain → deleted</text>
+  </g>
+
+  <text x="48" y="36" font-size="18" font-weight="700" fill="#f8fafc">Chained routines ("GFS extended" template) · 24 + 7 + 4 + 6 = 41 backups covering about half a year</text>
+  <text x="48" y="282" class="s">A backup that falls out of a routine moves on only if the next routine is due; otherwise it is deleted.</text>
+</svg>

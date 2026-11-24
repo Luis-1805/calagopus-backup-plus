@@ -14,6 +14,14 @@
   <b>Set up your backup strategy once — Backup Plus creates, rotates and cleans up your server backups for you.</b>
 </p>
 
+<p align="center">
+  <a href="docs/README.md"><b>📖 Read the guide</b></a> ·
+  <a href="docs/getting-started.md">🚀 Getting started</a> ·
+  <a href="docs/recipes.md">🍳 Recipes</a> ·
+  <a href="docs/troubleshooting.md">🛠️ Troubleshooting</a> ·
+  <a href="https://github.com/Luis-1805/calagopus-backup-plus/releases/latest">⬇️ Download</a>
+</p>
+
 ---
 
 ## Why Backup Plus?
@@ -148,6 +156,23 @@ That's it. The first backup is created within a minute, and from then on everyth
 
 > [!TIP]
 > Want a weekly backup that is always *at least* a week old? Set the weekly routine to keep **2**.
+
+## Documentation
+
+The **[full guide](docs/README.md)** explains every feature in detail:
+
+| | |
+| --- | --- |
+| 🚀 [Getting started](docs/getting-started.md) | Installation, backup limits, first setup |
+| 💡 [Core concepts](docs/concepts.md) | Routines, "take over", rotation step by step, chains |
+| 🗂️ [Routine reference](docs/routines.md) | Every setting, cron schedules, name templates, validation rules |
+| 🖥️ [The Auto-Backups tab](docs/server-tab.md) | Status, setup, editor, backup list, log, permissions |
+| 🧩 [Templates](docs/templates.md) | Built-in and custom templates |
+| 🍳 [Recipes](docs/recipes.md) | Ready-to-use backup strategies |
+| ⚙️ [Administration](docs/admin.md) | Global settings, bulk rollout, permissions, activity events |
+| 🛠️ [Troubleshooting & FAQ](docs/troubleshooting.md) | Error messages, skipped backups, common questions |
+| 🔌 [API](docs/api.md) | All endpoints with examples |
+| 🔍 [How it works](docs/how-it-works.md) | Background task, algorithm, data model, translations |
 
 ## Upgrading from 1.x
 
