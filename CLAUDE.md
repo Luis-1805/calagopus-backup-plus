@@ -146,8 +146,12 @@ Builds don't work natively on Windows. Use **WSL Ubuntu** (`wsl -d Ubuntu -u roo
   them.
 - **Version bump:** `backend/Cargo.toml` `version` and `frontend/src/version.ts` together. The server page compares the
   frontend and installed versions and warns about stale cached UIs (Ctrl+Shift+R / purge the Cloudflare cache).
-- **Pack:** zip `Metadata.toml backend/Cargo.toml backend/src frontend/package.json frontend/src frontend/public
-  migrations` (no node_modules) as `dev_backupsplus_backups.c7s.zip`. `*.c7s.zip` is gitignored.
+  A stale frontend after an upgrade can also show "Backend missing" on the old extension card and "route not found"
+  in the tab. A hard reload fixes it (seen when upgrading to 2.4.0).
+- **Pack:** from the repo root, `zip -r dev_backupsplus_backups.c7s.zip Metadata.toml backend frontend migrations -x '*/node_modules/*'`.
+  Zip whole folders: the panel needs the directory entries `backend/`, `frontend/` and `migrations/`. Zipping only
+  `backend/src` etc. fails with "unable to find directory `backend/`" (happened with the first 2.4.0 asset).
+  `*.c7s.zip` is gitignored.
 - **Release:**
   1. Commit, then tag `vX.Y.Z`.
   2. Run `gh release create` with notes in the style of earlier releases (New / Changed / Installation / Tested) and
@@ -156,7 +160,8 @@ Builds don't work natively on Windows. Use **WSL Ubuntu** (`wsl -d Ubuntu -u roo
 
 ## Current state (update this!)
 
-- Latest release: **v2.4.0**, the first one as "Backups Plus" with the new package ID.
+- Latest release: **v2.4.0**, the first one as "Backups Plus" with the new package ID. It runs on the owner's panel
+  (upgrade path confirmed).
 - Version bumps get their own commit "Backups Plus <version>", made by the owner's push workflow, never inside
   feature commits. Release titles look like "Backups Plus v2.4.0 — short summary".
 
@@ -176,4 +181,3 @@ Builds don't work natively on Windows. Use **WSL Ubuntu** (`wsl -d Ubuntu -u roo
   Ask for the exact template and resulting name.
 - Repo rename to `calagopus-backups-plus` is pending. The docs and README still link to `calagopus-backup-plus`.
 - Remove `backend/src/legacy.rs` (and `mod legacy` plus its call in `engine::tick`) in 2.5. Keep the SQL migrations.
-- 2.4.0 has not been tested on a live panel yet (owner should report back after upgrading).
