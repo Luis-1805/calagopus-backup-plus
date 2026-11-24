@@ -156,14 +156,24 @@ Builds don't work natively on Windows. Use **WSL Ubuntu** (`wsl -d Ubuntu -u roo
 
 ## Current state (update this!)
 
-- Released: up to **v2.3.0** (as "Backup Plus", old package ID).
-- **The next release (planned 2.4.0) is committed on `main` but not pushed or released.** It includes the rename and
-  package-ID migration, min interval in seconds with a per-server override, immediate throttling, collapsible
-  routines, the full license text and the 5 s tick. The version in the repo is still 2.3.0. The owner's push workflow
-  bumps it, so don't bump it in feature commits. Release notes are drafted outside the repo.
-- Open items:
-  - `{server}` placeholder reported as "not working" by the owner. Code and test show it works, so it was not reproduced.
-    Ask for the exact template and resulting name.
-  - Repo rename to `calagopus-backups-plus` is pending. The docs and README still link to `calagopus-backup-plus`.
-  - Remove `backend/src/legacy.rs` (and `mod legacy` plus its call in `engine::tick`) in 2.5. Keep the SQL migrations.
-  - 2.4.0 has not been tested on a live panel yet.
+- Latest release: **v2.4.0**, the first one as "Backups Plus" with the new package ID.
+- Version bumps get their own commit "Backups Plus <version>", made by the owner's push workflow, never inside
+  feature commits. Release titles look like "Backups Plus v2.4.0 — short summary".
+
+## Releases
+
+- v2.4.0 (2026-11-24): renamed to Backups Plus (new package ID, automatic takeover); min interval down to 5 s,
+  overridable per server, applied immediately; collapsible routines; full license text; 5 s tick.
+- v2.3.0 (2026-11-24): min interval in minutes, visible rename field for take-over routines, version check.
+- v2.2.0 (2026-11-24): rename backups on take-over, time zone fix.
+- v2.1.1 (2026-11-24): wait for running backups instead of skipping.
+- v2.1.0 (2026-11-24): English and German.
+- v2.0.0 (2026-11-24): configurable backup routines.
+- v1.0.0 (2026-11-24): first release (fixed hourly/daily/weekly/monthly tiers).
+
+## Open items
+- `{server}` placeholder reported as "not working" by the owner. Code and test show it works, so it was not reproduced.
+  Ask for the exact template and resulting name.
+- Repo rename to `calagopus-backups-plus` is pending. The docs and README still link to `calagopus-backup-plus`.
+- Remove `backend/src/legacy.rs` (and `mod legacy` plus its call in `engine::tick`) in 2.5. Keep the SQL migrations.
+- 2.4.0 has not been tested on a live panel yet (owner should report back after upgrading).
