@@ -1,0 +1,24 @@
+[package]
+name = "dev_backupplus_gfsbackups"
+description = "Automatische Server-Backups mit GFS-Rotation (stündlich/täglich/wöchentlich/monatlich) und automatischer Bereinigung."
+authors = ["Luis-1805"]
+version = "1.0.0"
+edition = { workspace = true }
+
+[dependencies]
+shared = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+axum = { workspace = true }
+utoipa = { workspace = true }
+utoipa-axum = { workspace = true }
+garde = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+compact_str = { workspace = true }
+indexmap = { workspace = true }
+croner = { workspace = true }

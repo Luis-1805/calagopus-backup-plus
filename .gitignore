@@ -1,0 +1,4 @@
+# Build-Artefakte
+target/
+node_modules/
+*.c7s.zip
