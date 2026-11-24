@@ -146,6 +146,8 @@
     },
     "editor": {
       "empty": "Noch keine Routine angelegt. Wende oben eine Vorlage an oder füge eine Routine hinzu.",
+      "collapse": "Einklappen",
+      "expand": "Ausklappen",
       "moveUp": "Nach oben",
       "moveDown": "Nach unten",
       "remove": "Routine entfernen (ihre Backups bleiben erhalten)",

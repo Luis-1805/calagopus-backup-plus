@@ -141,6 +141,8 @@ const translations = defineTranslations({
     },
     editor: {
       empty: 'No routines yet. Apply a template above or add a routine.',
+      collapse: 'Collapse',
+      expand: 'Expand',
       moveUp: 'Move up',
       moveDown: 'Move down',
       remove: 'Remove routine (its backups are kept)',

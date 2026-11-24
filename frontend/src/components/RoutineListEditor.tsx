@@ -1,7 +1,26 @@
-import { faArrowDown, faArrowUp, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
+import {
+  faArrowDown,
+  faArrowUp,
+  faChevronDown,
+  faChevronRight,
+  faPlus,
+  faTrash,
+} from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { ActionIcon, Badge, Card, Group, Select, SimpleGrid, Stack, Text, Tooltip } from '@mantine/core';
-import type { ReactNode } from 'react';
+import {
+  ActionIcon,
+  Badge,
+  Card,
+  Collapse,
+  Group,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
+import { type ReactNode, useState } from 'react';
 import Button from '@/elements/buttons/Button.tsx';
 import CronInput from '@/elements/input/CronInput.tsx';
 import NumberInput from '@/elements/input/NumberInput.tsx';
@@ -44,8 +63,32 @@ export function routineColor(index: number): string {
   return routineColors[index % routineColors.length];
 }
 
+const COLLAPSED_KEY = 'backups-plus:collapsed-routines';
+
+function loadCollapsed(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]'));
+  } catch {
+    return new Set();
+  }
+}
+
 export default function RoutineListEditor({ routines, onChange, timezone, maxRoutines, readOnly, renderExtra }: Props) {
   const { t: tExt, tItem: tExtItem } = useExtTranslations();
+  const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
+
+  const toggle = (key: string) => {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      try {
+        localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
+      } catch {
+        // Only a convenience – ignore blocked storage.
+      }
+      return next;
+    });
+  };
 
   const update = (index: number, patch: Partial<RoutineInput>) => {
     onChange(routines.map((r, i) => (i === index ? { ...r, ...patch } : r)));
@@ -54,9 +97,7 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
   const remove = (index: number) => {
     const removed = routines[index];
     onChange(
-      routines
-        .filter((_, i) => i !== index)
-        .map((r) => (r.sourceKey === removed.key ? { ...r, sourceKey: null } : r)),
+      routines.filter((_, i) => i !== index).map((r) => (r.sourceKey === removed.key ? { ...r, sourceKey: null } : r)),
     );
   };
 
@@ -101,21 +142,35 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
           .filter((r) => r.key !== routine.key)
           .map((r) => ({ value: r.key, label: r.name || tExt('common.unnamed', {}) }));
 
+        const isCollapsed = collapsed.has(routine.key);
+
         return (
           <Card key={routine.key} withBorder radius='md' p='md'>
             <Stack gap='sm'>
               <Group justify='space-between' wrap='nowrap'>
-                <Group gap='xs' wrap='nowrap'>
-                  <Badge color={routineColor(index)} variant='light'>
-                    {index + 1}
-                  </Badge>
-                  <Text fw={600}>{routine.name || tExt('common.unnamed', {})}</Text>
-                  {!routine.enabled && (
-                    <Badge color='gray' variant='outline'>
-                      {tExt('common.paused', {})}
+                <UnstyledButton
+                  onClick={() => toggle(routine.key)}
+                  aria-expanded={!isCollapsed}
+                  title={isCollapsed ? tExt('editor.expand', {}) : tExt('editor.collapse', {})}
+                >
+                  <Group gap='xs' wrap='nowrap'>
+                    <FontAwesomeIcon icon={isCollapsed ? faChevronRight : faChevronDown} fixedWidth />
+                    <Badge color={routineColor(index)} variant='light'>
+                      {index + 1}
                     </Badge>
-                  )}
-                </Group>
+                    <Text fw={600}>{routine.name || tExt('common.unnamed', {})}</Text>
+                    {isCollapsed && (
+                      <Text size='xs' c='dimmed' ff='monospace'>
+                        {routine.cron}
+                      </Text>
+                    )}
+                    {!routine.enabled && (
+                      <Badge color='gray' variant='outline'>
+                        {tExt('common.paused', {})}
+                      </Badge>
+                    )}
+                  </Group>
+                </UnstyledButton>
                 {!readOnly && (
                   <Group gap={4} wrap='nowrap'>
                     <Tooltip label={tExt('editor.moveUp', {})}>
@@ -143,126 +198,132 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
 
               {renderExtra?.(routine)}
 
-              <SimpleGrid cols={{ base: 1, sm: 2 }}>
-                <TextInput
-                  label={tExt('editor.name', {})}
-                  value={routine.name}
-                  disabled={readOnly}
-                  maxLength={64}
-                  onChange={(e) => update(index, { name: e.currentTarget.value })}
-                />
-                <Select
-                  label={tExt('editor.type', {})}
-                  disabled={readOnly}
-                  allowDeselect={false}
-                  value={routine.source}
-                  data={[
-                    { value: 'create', label: tExt('editor.typeCreate', {}) },
-                    { value: 'promote', label: tExt('editor.typePromote', {}) },
-                  ]}
-                  onChange={(value) =>
-                    update(index, {
-                      source: value === 'promote' ? 'promote' : 'create',
-                      sourceKey: value === 'promote' ? (sourceOptions[0]?.value ?? null) : null,
-                      renameTemplate: value === 'promote' ? routine.renameTemplate : null,
-                    })
-                  }
-                />
-              </SimpleGrid>
+              <Collapse expanded={!isCollapsed}>
+                <Stack gap='sm'>
+                  <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                    <TextInput
+                      label={tExt('editor.name', {})}
+                      value={routine.name}
+                      disabled={readOnly}
+                      maxLength={64}
+                      onChange={(e) => update(index, { name: e.currentTarget.value })}
+                    />
+                    <Select
+                      label={tExt('editor.type', {})}
+                      disabled={readOnly}
+                      allowDeselect={false}
+                      value={routine.source}
+                      data={[
+                        { value: 'create', label: tExt('editor.typeCreate', {}) },
+                        { value: 'promote', label: tExt('editor.typePromote', {}) },
+                      ]}
+                      onChange={(value) =>
+                        update(index, {
+                          source: value === 'promote' ? 'promote' : 'create',
+                          sourceKey: value === 'promote' ? (sourceOptions[0]?.value ?? null) : null,
+                          renameTemplate: value === 'promote' ? routine.renameTemplate : null,
+                        })
+                      }
+                    />
+                  </SimpleGrid>
 
-              {routine.source === 'promote' && (
-                <Select
-                  label={tExt('editor.source', {})}
-                  description={tExt('editor.sourceDescription', {})}
-                  disabled={readOnly}
-                  value={routine.sourceKey}
-                  data={sourceOptions}
-                  placeholder={tExt('editor.sourcePlaceholder', {})}
-                  onChange={(value) => update(index, { sourceKey: value })}
-                />
-              )}
+                  {routine.source === 'promote' && (
+                    <Select
+                      label={tExt('editor.source', {})}
+                      description={tExt('editor.sourceDescription', {})}
+                      disabled={readOnly}
+                      value={routine.sourceKey}
+                      data={sourceOptions}
+                      placeholder={tExt('editor.sourcePlaceholder', {})}
+                      onChange={(value) => update(index, { sourceKey: value })}
+                    />
+                  )}
 
-              <SimpleGrid cols={{ base: 1, sm: 2 }}>
-                <CronInput
-                  label={
-                    routine.source === 'create' ? tExt('editor.scheduleCreate', {}) : tExt('editor.schedulePromote', {})
-                  }
-                  description={tExt('editor.scheduleDescription', { timezone })}
-                  value={routine.cron}
-                  timezone={timezone}
-                  onChange={(value) => !readOnly && update(index, { cron: value })}
-                />
-                <Select
-                  label={tExt('editor.presets', {})}
-                  placeholder={tExt('editor.presetsPlaceholder', {})}
-                  disabled={readOnly}
-                  value={presetOptions.some((p) => p.value === routine.cron) ? routine.cron : null}
-                  data={presetOptions}
-                  onChange={(value) => value && update(index, { cron: value })}
-                />
-              </SimpleGrid>
+                  <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                    <CronInput
+                      label={
+                        routine.source === 'create'
+                          ? tExt('editor.scheduleCreate', {})
+                          : tExt('editor.schedulePromote', {})
+                      }
+                      description={tExt('editor.scheduleDescription', { timezone })}
+                      value={routine.cron}
+                      timezone={timezone}
+                      onChange={(value) => !readOnly && update(index, { cron: value })}
+                    />
+                    <Select
+                      label={tExt('editor.presets', {})}
+                      placeholder={tExt('editor.presetsPlaceholder', {})}
+                      disabled={readOnly}
+                      value={presetOptions.some((p) => p.value === routine.cron) ? routine.cron : null}
+                      data={presetOptions}
+                      onChange={(value) => value && update(index, { cron: value })}
+                    />
+                  </SimpleGrid>
 
-              <SimpleGrid cols={{ base: 1, sm: 3 }}>
-                <NumberInput
-                  label={tExt('editor.keep', {})}
-                  description={tExt('editor.keepDescription', {})}
-                  min={1}
-                  max={500}
-                  disabled={readOnly}
-                  value={routine.keepCount}
-                  onChange={(value) => update(index, { keepCount: Number(value) || 1 })}
-                />
-                <NumberInput
-                  label={tExt('editor.maxAge', {})}
-                  description={tExt('editor.maxAgeDescription', {})}
-                  min={0}
-                  max={87600}
-                  disabled={readOnly}
-                  value={routine.maxAgeHours}
-                  onChange={(value) => update(index, { maxAgeHours: Number(value) || 0 })}
-                />
-                <Switch
-                  label={tExt('editor.enabled', {})}
-                  mt='lg'
-                  disabled={readOnly}
-                  checked={routine.enabled}
-                  onChange={(e) => update(index, { enabled: e.currentTarget.checked })}
-                />
-              </SimpleGrid>
+                  <SimpleGrid cols={{ base: 1, sm: 3 }}>
+                    <NumberInput
+                      label={tExt('editor.keep', {})}
+                      description={tExt('editor.keepDescription', {})}
+                      min={1}
+                      max={500}
+                      disabled={readOnly}
+                      value={routine.keepCount}
+                      onChange={(value) => update(index, { keepCount: Number(value) || 1 })}
+                    />
+                    <NumberInput
+                      label={tExt('editor.maxAge', {})}
+                      description={tExt('editor.maxAgeDescription', {})}
+                      min={0}
+                      max={87600}
+                      disabled={readOnly}
+                      value={routine.maxAgeHours}
+                      onChange={(value) => update(index, { maxAgeHours: Number(value) || 0 })}
+                    />
+                    <Switch
+                      label={tExt('editor.enabled', {})}
+                      mt='lg'
+                      disabled={readOnly}
+                      checked={routine.enabled}
+                      onChange={(e) => update(index, { enabled: e.currentTarget.checked })}
+                    />
+                  </SimpleGrid>
 
-              {routine.source === 'create' && (
-                <SimpleGrid cols={{ base: 1, sm: 2 }}>
-                  <TextInput
-                    label={tExt('editor.nameTemplate', {})}
-                    description='{routine}, {date}, {day}, {time}, {server}'
-                    disabled={readOnly}
-                    value={routine.nameTemplate}
-                    maxLength={200}
-                    onChange={(e) => update(index, { nameTemplate: e.currentTarget.value })}
-                  />
-                  <TextArea
-                    label={tExt('editor.ignoredFiles', {})}
-                    description={tExt('editor.ignoredFilesDescription', {})}
-                    autosize
-                    minRows={1}
-                    disabled={readOnly}
-                    value={routine.ignoredFiles.join('\n')}
-                    onChange={(e) => update(index, { ignoredFiles: e.currentTarget.value.split('\n') })}
-                  />
-                </SimpleGrid>
-              )}
+                  {routine.source === 'create' && (
+                    <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                      <TextInput
+                        label={tExt('editor.nameTemplate', {})}
+                        description='{routine}, {date}, {day}, {time}, {server}'
+                        disabled={readOnly}
+                        value={routine.nameTemplate}
+                        maxLength={200}
+                        onChange={(e) => update(index, { nameTemplate: e.currentTarget.value })}
+                      />
+                      <TextArea
+                        label={tExt('editor.ignoredFiles', {})}
+                        description={tExt('editor.ignoredFilesDescription', {})}
+                        autosize
+                        minRows={1}
+                        disabled={readOnly}
+                        value={routine.ignoredFiles.join('\n')}
+                        onChange={(e) => update(index, { ignoredFiles: e.currentTarget.value.split('\n') })}
+                      />
+                    </SimpleGrid>
+                  )}
 
-              {routine.source === 'promote' && (
-                <TextInput
-                  label={tExt('editor.renameTemplate', {})}
-                  description={`${tExt('editor.renameDescription', {})} {routine}, {date}, {day}, {time}, {server}, {original}`}
-                  placeholder={`{routine} {date} – ${tExt('editor.renamePlaceholderSuffix', {})}`}
-                  disabled={readOnly}
-                  value={routine.renameTemplate ?? ''}
-                  maxLength={200}
-                  onChange={(e) => update(index, { renameTemplate: e.currentTarget.value || null })}
-                />
-              )}
+                  {routine.source === 'promote' && (
+                    <TextInput
+                      label={tExt('editor.renameTemplate', {})}
+                      description={`${tExt('editor.renameDescription', {})} {routine}, {date}, {day}, {time}, {server}, {original}`}
+                      placeholder={`{routine} {date} – ${tExt('editor.renamePlaceholderSuffix', {})}`}
+                      disabled={readOnly}
+                      value={routine.renameTemplate ?? ''}
+                      maxLength={200}
+                      onChange={(e) => update(index, { renameTemplate: e.currentTarget.value || null })}
+                    />
+                  )}
+                </Stack>
+              </Collapse>
             </Stack>
           </Card>
         );
