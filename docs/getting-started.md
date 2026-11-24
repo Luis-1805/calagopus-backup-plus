@@ -72,8 +72,8 @@ Auto-Backups tab warns you in red when the limit is too low for your routines.
 That's it. The first backup is created within about a minute.
 
 > [!NOTE]
-> Prefer to build your own? Skip the template, click **Add routine** in the **Routines** card, configure it (see the
-> [routine reference](routines.md)), switch on **Automatic backups active** and click **Save**.
+> Prefer to build your own? The **[beginner tutorial](tutorial.md)** walks you through planning and building a
+> complete strategy step by step — without a template.
 
 ## 5. Check that it works
 

@@ -159,3 +159,58 @@ fn gfs_extended_settles_at_41() {
     assert_eq!(sim.count("Monatlich"), 6);
     assert!(sim.count("Stündlich") >= 24);
 }
+
+/// Die Strategie aus dem Einsteiger-Tutorial (docs/tutorial.md):
+/// Hourly(3) → Daily(7) → Weekly(4) → Monthly(3) = 17 Backups.
+#[test]
+fn tutorial_chain_settles_at_17_and_reaches_months_back() {
+    use crate::templates::{Template, TemplateRoutine};
+
+    let routine = |name: &str, cron: &str, source: Option<&str>, keep: i32| TemplateRoutine {
+        name: name.into(),
+        enabled: true,
+        cron: cron.into(),
+        source: if source.is_some() { RoutineSource::Promote } else { RoutineSource::Create },
+        source_name: source.map(Into::into),
+        keep_count: keep,
+        max_age_hours: 0,
+        name_template: "Auto {routine} {date}".into(),
+        ignored_files: Vec::new(),
+    };
+    let template = Template {
+        id: "tutorial".into(),
+        name: "Tutorial".into(),
+        description: String::new(),
+        builtin: false,
+        routines: vec![
+            routine("Hourly", "0 0 * * * *", None, 3),
+            routine("Daily", "0 0 0 * * *", Some("Hourly"), 7),
+            routine("Weekly", "0 0 0 * * 1", Some("Daily"), 4),
+            routine("Monthly", "0 0 0 1 * *", Some("Weekly"), 3),
+        ],
+    };
+
+    let mut sim = Sim {
+        routines: templates::to_routines(&template, uuid::Uuid::nil()).unwrap(),
+        backups: Vec::new(),
+        tz: chrono_tz::Europe::Berlin,
+        next_id: 1,
+    };
+
+    let mut now = start();
+    for minute in 0..(60 * 24 * 200) {
+        now = start() + chrono::Duration::minutes(minute);
+        sim.tick(now);
+    }
+
+    assert_eq!(sim.count("Hourly"), 3);
+    assert_eq!(sim.count("Daily"), 7);
+    assert_eq!(sim.count("Weekly"), 4);
+    assert_eq!(sim.count("Monthly"), 3);
+
+    // Ältestes Backup: mindestens 3, höchstens 5 Monate alt.
+    let oldest = sim.backups.iter().map(|b| now - b.created).max().unwrap();
+    assert!(oldest >= chrono::Duration::days(90), "oldest only {} days", oldest.num_days());
+    assert!(oldest <= chrono::Duration::days(155), "oldest {} days", oldest.num_days());
+    println!("tutorial chain: oldest backup {} days", oldest.num_days());
+}

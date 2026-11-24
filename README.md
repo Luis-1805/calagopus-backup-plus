@@ -17,6 +17,7 @@
 <p align="center">
   <a href="docs/README.md"><b>📖 Read the guide</b></a> ·
   <a href="docs/getting-started.md">🚀 Getting started</a> ·
+  <a href="docs/tutorial.md">🎓 Tutorial</a> ·
   <a href="docs/recipes.md">🍳 Recipes</a> ·
   <a href="docs/troubleshooting.md">🛠️ Troubleshooting</a> ·
   <a href="https://github.com/Luis-1805/calagopus-backup-plus/releases/latest">⬇️ Download</a>
@@ -164,6 +165,7 @@ The **[full guide](docs/README.md)** explains every feature in detail:
 | | |
 | --- | --- |
 | 🚀 [Getting started](docs/getting-started.md) | Installation, backup limits, first setup |
+| 🎓 [Tutorial](docs/tutorial.md) | **New to backups?** Build your own strategy step by step, with exercises |
 | 💡 [Core concepts](docs/concepts.md) | Routines, "take over", rotation step by step, chains |
 | 🗂️ [Routine reference](docs/routines.md) | Every setting, cron schedules, name templates, validation rules |
 | 🖥️ [The Auto-Backups tab](docs/server-tab.md) | Status, setup, editor, backup list, log, permissions |

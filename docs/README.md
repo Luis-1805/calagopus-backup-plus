@@ -7,6 +7,7 @@ Everything you need to know to set up, use and run Backup Plus — from your fir
 | | Page | What you'll learn |
 | --- | --- | --- |
 | 🚀 | [Getting started](getting-started.md) | Install the extension and get automatic backups running in five minutes |
+| 🎓 | [Tutorial: build your own strategy](tutorial.md) | **For beginners:** plan and build a complete backup strategy step by step — no template, every setting explained, with exercises |
 | 💡 | [Core concepts](concepts.md) | Routines, "take over", rotation and what happens to every backup |
 
 ## Using Backup Plus
