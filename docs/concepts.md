@@ -54,7 +54,7 @@ created within a minute, and take-over routines adopt the first backup that fall
 
 > [!NOTE]
 > Example: the weekly routine of the default template has the schedule *Monday 00:00*. On Monday at 00:00 it becomes
-> due. The next time an hourly backup falls out (shortly after the 01:00 backup completes), the weekly routine takes it
+> due. The next time an hourly backup falls out (a few minutes later, once the 00:00 backup has finished), the weekly routine takes it
 > over and the previous weekly backup is deleted. The weekly routine is then done until next Monday.
 
 ## Rotation: what happens to every backup
