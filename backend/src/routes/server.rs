@@ -42,7 +42,7 @@ mod types {
     }
 
     impl ApiRoutine {
-        pub fn new(routine: Routine, backup_count: i64) -> Self {
+        pub fn new(routine: Routine, backup_count: i64, lang: crate::i18n::Lang) -> Self {
             Self {
                 uuid: routine.uuid,
                 name: routine.name,
@@ -57,7 +57,9 @@ mod types {
                 ignored_files: routine.ignored_files,
                 next_run: routine.next_run.map(|t| t.and_utc()),
                 last_run: routine.last_run.map(|t| t.and_utc()),
-                last_error: routine.last_error,
+                last_error: routine
+                    .last_error
+                    .map(|e| crate::i18n::Msg::from_stored(&e).render(lang)),
                 backup_count,
             }
         }
@@ -115,9 +117,11 @@ async fn build_overview(
     state: &State,
     server: &shared::models::server::Server,
     can_customize: bool,
+    lang: crate::i18n::Lang,
 ) -> Result<types::Response, anyhow::Error> {
     use crate::{
         engine,
+        i18n::Msg,
         models::{ManagedBackup, Policy, Routine, read_log},
         retention::{self, PlannedAction},
         schedule,
@@ -165,11 +169,11 @@ async fn build_overview(
                 .iter()
                 .filter(|b| b.routine_uuid == Some(routine.uuid))
                 .count() as i64;
-            types::ApiRoutine::new(routine, count)
+            types::ApiRoutine::new(routine, count, lang)
         })
         .collect();
 
-    let log = read_log(&state.database, server.uuid, 50).await?;
+    let log = read_log(&state.database, server.uuid, 50, lang).await?;
     let backups_total =
         shared::models::server_backup::ServerBackup::count_by_server_uuid(&state.database, server.uuid)
             .await?;
@@ -180,7 +184,7 @@ async fn build_overview(
             enabled: policy.enabled,
             delete_failed: policy.delete_failed,
             last_run: policy.last_run.map(|t| t.and_utc()),
-            last_error: policy.last_error,
+            last_error: policy.last_error.map(|e| Msg::from_stored(&e).render(lang)),
         },
         routines,
         backups,
@@ -195,7 +199,7 @@ async fn build_overview(
             backup_limit: server.backup_limit,
             backups_total,
         },
-        templates: settings.all_templates(),
+        templates: settings.all_templates(lang),
         default_template_id: settings.default_template_id.clone(),
         timezone: schedule::server_timezone(server.timezone.as_deref()).name().to_string(),
     })
@@ -222,13 +226,15 @@ mod get {
         state: GetState,
         permissions: GetPermissionManager,
         server: GetServer,
+        user: shared::models::user::GetUser,
     ) -> ApiResponseResult {
         permissions.has_server_permission("backup-plus.read")?;
+        let lang = crate::i18n::Lang::from_code(&user.language);
 
         let settings = crate::settings::load(&state).await;
         let can_customize = super::can_customize(&settings, &permissions);
 
-        ApiResponse::new_serialized(super::build_overview(&state, &server, can_customize).await?).ok()
+        ApiResponse::new_serialized(super::build_overview(&state, &server, can_customize, lang).await?).ok()
     }
 }
 
@@ -312,6 +318,7 @@ mod put {
         state: GetState,
         permissions: GetPermissionManager,
         server: GetServer,
+        user: shared::models::user::GetUser,
         activity_logger: GetServerActivityLogger,
         shared::Payload(data): shared::Payload<Payload>,
     ) -> ApiResponseResult {
@@ -322,6 +329,7 @@ mod put {
         }
 
         permissions.has_server_permission("backup-plus.manage")?;
+        let lang = crate::i18n::Lang::from_code(&user.language);
 
         let settings = crate::settings::load(&state).await;
         let can_customize = super::can_customize(&settings, &permissions);
@@ -346,7 +354,7 @@ mod put {
                     .filter(|uuid| existing.iter().any(|r| r.uuid == *uuid))
                     .unwrap_or_else(uuid::Uuid::new_v4);
                 if keys.insert(input.key.clone(), uuid).is_some() {
-                    return ApiResponse::error("Doppelter Routinen-Schlüssel.").ok();
+                    return ApiResponse::error(crate::i18n::t("err.duplicate_key", lang)).ok();
                 }
             }
 
@@ -406,7 +414,7 @@ mod put {
                     timezone,
                 }),
             ) {
-                return ApiResponse::error(err).ok();
+                return ApiResponse::error(err.render(lang)).ok();
             }
 
             Some(routines)
@@ -415,10 +423,7 @@ mod put {
         };
 
         if policy.enabled && routines.as_ref().map_or(existing.is_empty(), Vec::is_empty) {
-            return ApiResponse::error(
-                "Bitte zuerst mindestens eine Routine anlegen oder eine Vorlage anwenden.",
-            )
-            .ok();
+            return ApiResponse::error(crate::i18n::t("err.no_routines", lang)).ok();
         }
 
         policy.last_error = None;
@@ -450,7 +455,7 @@ mod put {
             )
             .await;
 
-        ApiResponse::new_serialized(super::build_overview(&state, &server, can_customize).await?).ok()
+        ApiResponse::new_serialized(super::build_overview(&state, &server, can_customize, lang).await?).ok()
     }
 }
 
@@ -497,20 +502,22 @@ mod apply_template {
             state: GetState,
             permissions: GetPermissionManager,
             server: GetServer,
+            user: shared::models::user::GetUser,
             activity_logger: GetServerActivityLogger,
             shared::Payload(data): shared::Payload<Payload>,
         ) -> ApiResponseResult {
             permissions.has_server_permission("backup-plus.manage")?;
+            let lang = crate::i18n::Lang::from_code(&user.language);
 
             let settings = crate::settings::load(&state).await;
             let can_customize = super::super::can_customize(&settings, &permissions);
-            let Some(template) = settings.find_template(&data.template_id) else {
-                return ApiResponse::error("Vorlage nicht gefunden.").ok();
+            let Some(template) = settings.find_template(&data.template_id, lang) else {
+                return ApiResponse::error(crate::i18n::t("err.template_not_found", lang)).ok();
             };
 
             let routines = match templates::to_routines(&template, server.uuid) {
                 Ok(routines) => routines,
-                Err(err) => return ApiResponse::error(err).ok(),
+                Err(err) => return ApiResponse::error(err.render(lang)).ok(),
             };
             if let Err(err) = validation::validate(
                 &routines,
@@ -520,7 +527,11 @@ mod apply_template {
                     timezone: schedule::server_timezone(server.timezone.as_deref()),
                 }),
             ) {
-                return ApiResponse::error(format!("Vorlage passt nicht: {err}")).ok();
+                return ApiResponse::error(
+                    crate::i18n::Msg::new("err.template_doesnt_fit")
+                        .arg_msg("error", &err)
+                        .render(lang),
+                ).ok();
             }
 
             let mut policy = Policy::by_server_uuid(&state.database, server.uuid)
@@ -535,7 +546,7 @@ mod apply_template {
                 &state.database,
                 server.uuid,
                 "info",
-                format!("Vorlage \"{}\" angewendet", template.name),
+                crate::i18n::Msg::new("log.template_applied").arg("template", &template.name),
             )
             .await;
             activity_logger
@@ -546,7 +557,7 @@ mod apply_template {
                 .await;
 
             ApiResponse::new_serialized(
-                super::super::build_overview(&state, &server, can_customize).await?,
+                super::super::build_overview(&state, &server, can_customize, lang).await?,
             )
             .ok()
         }
@@ -598,10 +609,12 @@ mod run {
             state: GetState,
             permissions: GetPermissionManager,
             server: GetServer,
+            user: shared::models::user::GetUser,
             activity_logger: GetServerActivityLogger,
             shared::Payload(data): shared::Payload<Payload>,
         ) -> ApiResponseResult {
             permissions.has_server_permission("backup-plus.manage")?;
+            let lang = crate::i18n::Lang::from_code(&user.language);
 
             state
                 .cache
@@ -614,20 +627,18 @@ mod run {
                 {
                     Ok(Some(uuid)) => Some(uuid),
                     Ok(None) => {
-                        return ApiResponse::error(
-                            "Backup wurde übersprungen – Details stehen im Protokoll.",
-                        )
-                        .ok();
+                        return ApiResponse::error(crate::i18n::t("err.skipped_see_log", lang)).ok();
                     }
                     Err(err) => {
                         crate::models::write_log(
                             &state.database,
                             server.uuid,
                             "error",
-                            format!("Manueller Lauf fehlgeschlagen: {err:#}"),
+                            crate::i18n::Msg::new("log.manual_run_failed")
+                                .arg_msg("error", &crate::i18n::Msg::from_error(&err)),
                         )
                         .await;
-                        return ApiResponse::error(format!("{err:#}")).ok();
+                        return ApiResponse::error(crate::i18n::Msg::from_error(&err).render(lang)).ok();
                     }
                 };
 
@@ -658,6 +669,7 @@ mod backup {
         state: &State,
         server_uuid: uuid::Uuid,
         backup_uuid: uuid::Uuid,
+        lang: crate::i18n::Lang,
     ) -> Result<shared::models::server_backup::ServerBackup, anyhow::Error> {
         use axum::http::StatusCode;
         use shared::response::DisplayError;
@@ -678,7 +690,7 @@ mod backup {
             {
                 Ok(backup)
             }
-            _ => Err(DisplayError::new("Backup nicht gefunden")
+            _ => Err(DisplayError::new(crate::i18n::t("err.backup_not_found", lang))
                 .with_status(StatusCode::NOT_FOUND)
                 .into()),
         }
@@ -718,13 +730,15 @@ mod backup {
             state: GetState,
             permissions: GetPermissionManager,
             server: GetServer,
+            user: shared::models::user::GetUser,
             activity_logger: GetServerActivityLogger,
             axum::extract::Path((_server, backup_uuid)): axum::extract::Path<(uuid::Uuid, uuid::Uuid)>,
             shared::Payload(data): shared::Payload<Payload>,
         ) -> ApiResponseResult {
             permissions.has_server_permission("backup-plus.manage")?;
+            let lang = crate::i18n::Lang::from_code(&user.language);
 
-            let mut backup = super::find_managed(&state, server.uuid, backup_uuid).await?;
+            let mut backup = super::find_managed(&state, server.uuid, backup_uuid, lang).await?;
             backup
                 .update(
                     &state,
@@ -739,11 +753,8 @@ mod backup {
                 &state.database,
                 server.uuid,
                 "info",
-                if data.locked {
-                    format!("\"{}\" angepinnt (wird nie automatisch gelöscht)", backup.name)
-                } else {
-                    format!("\"{}\" losgelöst (unterliegt wieder der Rotation)", backup.name)
-                },
+                crate::i18n::Msg::new(if data.locked { "log.pinned" } else { "log.unpinned" })
+                    .arg("name", &backup.name),
             )
             .await;
 
@@ -788,17 +799,19 @@ mod backup {
             state: GetState,
             permissions: GetPermissionManager,
             server: GetServer,
+            user: shared::models::user::GetUser,
             axum::extract::Path((_server, backup_uuid)): axum::extract::Path<(uuid::Uuid, uuid::Uuid)>,
             shared::Payload(data): shared::Payload<Payload>,
         ) -> ApiResponseResult {
             permissions.has_server_permission("backup-plus.manage")?;
+            let lang = crate::i18n::Lang::from_code(&user.language);
 
-            let backup = super::find_managed(&state, server.uuid, backup_uuid).await?;
+            let backup = super::find_managed(&state, server.uuid, backup_uuid, lang).await?;
             let routines = Routine::all_for_server(&state.database, server.uuid).await?;
             let target = match data.routine_uuid {
                 Some(uuid) => match routines.iter().find(|r| r.uuid == uuid) {
                     Some(routine) => Some(routine),
-                    None => return ApiResponse::error("Routine nicht gefunden.").ok(),
+                    None => return ApiResponse::error(crate::i18n::t("err.routine_not_found", lang)).ok(),
                 },
                 None => None,
             };
@@ -810,14 +823,10 @@ mod backup {
                 server.uuid,
                 "info",
                 match target {
-                    Some(routine) => format!(
-                        "\"{}\" manuell der Routine \"{}\" zugeordnet",
-                        backup.name, routine.name
-                    ),
-                    None => format!(
-                        "\"{}\" aus der Rotation genommen (keiner Routine zugeordnet)",
-                        backup.name
-                    ),
+                    Some(routine) => crate::i18n::Msg::new("log.assigned")
+                        .arg("name", &backup.name)
+                        .arg("routine", &routine.name),
+                    None => crate::i18n::Msg::new("log.unassigned").arg("name", &backup.name),
                 },
             )
             .await;

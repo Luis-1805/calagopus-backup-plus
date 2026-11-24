@@ -1,6 +1,7 @@
 //! Ausführung: Backups anlegen, zwischen Routinen verschieben und löschen.
 
 use crate::{
+    i18n::Msg,
     models::{self, ManagedBackup, Policy, Routine, RoutineSource},
     retention::{self, BackupSpec, PlannedAction, RoutineSpec},
     schedule, settings,
@@ -16,7 +17,7 @@ use shared::{
     },
 };
 
-pub const GROUP_NAME: &str = "Backup Plus (automatisch)";
+pub const GROUP_NAME: &str = "Backup Plus (auto)";
 
 /// Laufende Backups, die älter sind, gelten als hängengeblieben und blockieren nicht mehr.
 const STUCK_AFTER_HOURS: i64 = 6;
@@ -54,8 +55,8 @@ pub async fn tick(state: State) -> Result<(), anyhow::Error> {
         handled.insert(server_uuid);
 
         if let Err(err) = run_server(&state, server_uuid, Trigger::Scheduled).await {
-            tracing::error!(server = %server_uuid, "backup-plus: Lauf fehlgeschlagen: {err:#?}");
-            models::write_log(&state.database, server_uuid, "error", format!("{err:#}")).await;
+            tracing::error!(server = %server_uuid, "backup-plus: run failed: {err:#?}");
+            models::write_log(&state.database, server_uuid, "error", Msg::from_error(&err)).await;
         }
     }
 
@@ -68,7 +69,7 @@ pub async fn tick(state: State) -> Result<(), anyhow::Error> {
             }
 
             if let Err(err) = run_retention(&state, server_uuid).await {
-                tracing::warn!(server = %server_uuid, "backup-plus: Bereinigung fehlgeschlagen: {err:#?}");
+                tracing::warn!(server = %server_uuid, "backup-plus: rotation failed: {err:#?}");
             }
         }
 
@@ -137,18 +138,15 @@ pub async fn run_server(
 
     let Some(index) = target else {
         if matches!(trigger, Trigger::Manual(_)) {
-            return Err(anyhow::anyhow!(
-                "Es gibt keine Routine, die neue Backups erstellt."
-            ));
+            return Err(Msg::new("err.no_create_routine").into());
         }
         return Ok(None);
     };
 
     if ctx.routines[index].source != RoutineSource::Create {
-        return Err(anyhow::anyhow!(
-            "Die Routine \"{}\" übernimmt Backups aus einer anderen Routine und erstellt selbst keine.",
-            ctx.routines[index].name
-        ));
+        return Err(Msg::new("err.routine_is_promote")
+            .arg("routine", &ctx.routines[index].name)
+            .into());
     }
 
     let result = create_backup(state, &mut ctx, index).await;
@@ -160,7 +158,7 @@ pub async fn run_server(
             .ok()
             .and_then(|cron| schedule::next_after(&cron, ctx.timezone, now));
         routine.last_run = Some(now);
-        routine.last_error = result.as_ref().err().map(|err| format!("{err:#}"));
+        routine.last_error = result.as_ref().err().map(|err| Msg::from_error(err).to_json());
         routine.save_run_state(&state.database).await?;
     } else if result.is_ok() {
         let routine = &mut ctx.routines[index];
@@ -170,7 +168,7 @@ pub async fn run_server(
     }
 
     ctx.policy.last_run = Some(now);
-    ctx.policy.last_error = result.as_ref().err().map(|err| format!("{err:#}"));
+    ctx.policy.last_error = result.as_ref().err().map(|err| Msg::from_error(err).to_json());
     ctx.policy.save_run_state(&state.database).await?;
 
     result
@@ -204,7 +202,7 @@ pub async fn ensure_group(state: &State, policy: &mut Policy) -> Result<uuid::Uu
         &state.database,
         policy.server_uuid,
         "info",
-        format!("Backup-Gruppe \"{GROUP_NAME}\" angelegt"),
+        Msg::new("log.group_created").arg("group", GROUP_NAME),
     )
     .await;
 
@@ -243,19 +241,15 @@ async fn create_backup(
 ) -> Result<Option<uuid::Uuid>, anyhow::Error> {
     let server_uuid = ctx.server.uuid;
     let routine_name = ctx.routines[index].name.clone();
-    let skip = |reason: &str| {
-        format!("\"{routine_name}\" übersprungen: {reason}")
-    };
-
     let reason = if ctx.server.suspended {
-        Some("Server ist gesperrt")
+        Some("log.skipped_suspended")
     } else if matches!(
         ctx.server.status,
         Some(ServerStatus::Installing) | Some(ServerStatus::RestoringBackup)
     ) {
-        Some("Server wird gerade installiert oder wiederhergestellt")
+        Some("log.skipped_installing")
     } else if ctx.server.destination_node.is_some() {
-        Some("Server wird gerade übertragen")
+        Some("log.skipped_transferring")
     } else if ManagedBackup::count_running(
         &state.database,
         ctx.group_uuid,
@@ -264,13 +258,19 @@ async fn create_backup(
     .await?
         > 0
     {
-        Some("ein vorheriges automatisches Backup läuft noch")
+        Some("log.skipped_running")
     } else {
         None
     };
 
     if let Some(reason) = reason {
-        models::write_log(&state.database, server_uuid, "warning", skip(reason)).await;
+        models::write_log(
+            &state.database,
+            server_uuid,
+            "warning",
+            Msg::new(reason).arg("routine", &routine_name),
+        )
+        .await;
         return Ok(None);
     }
 
@@ -295,11 +295,11 @@ async fn create_backup(
     if count >= ctx.server.backup_limit as i64 {
         drop(lock);
         let keep_total: i32 = ctx.routines.iter().map(|r| r.keep_count).sum();
-        return Err(anyhow::anyhow!(
-            "Backup-Limit des Servers erreicht ({count}/{}). Erhöhe das Limit auf mindestens {} oder reduziere die Anzahl behaltener Backups.",
-            ctx.server.backup_limit,
-            keep_total + 1
-        ));
+        return Err(Msg::new("err.backup_limit")
+            .arg("count", count)
+            .arg("limit", ctx.server.backup_limit)
+            .arg("needed", keep_total + 1)
+            .into());
     }
 
     let routine = &ctx.routines[index];
@@ -346,7 +346,9 @@ async fn create_backup(
         &state.database,
         server_uuid,
         "info",
-        format!("\"{name}\" für Routine \"{}\" gestartet", routine.name),
+        Msg::new("log.backup_started")
+            .arg("name", &name)
+            .arg("routine", &routine.name),
     )
     .await;
 
@@ -433,24 +435,24 @@ async fn apply_retention(
                     &state.database,
                     server_uuid,
                     "info",
-                    format!(
-                        "\"{}\" von \"{}\" nach \"{}\" übernommen",
-                        name_of(*uuid),
-                        routine_name(*from),
-                        routine_name(*to)
-                    ),
+                    Msg::new("log.moved")
+                        .arg("name", name_of(*uuid))
+                        .arg("from", routine_name(*from))
+                        .arg("to", routine_name(*to)),
                 )
                 .await;
             }
             PlannedAction::Delete { reason } => {
-                match delete_backup(state, server_uuid, *uuid, reason).await {
+                match delete_backup(state, server_uuid, *uuid, &reason.msg().render(crate::i18n::Lang::En)).await {
                     Ok(()) => {
                         deleted += 1;
                         models::write_log(
                             &state.database,
                             server_uuid,
                             "info",
-                            format!("\"{}\" gelöscht ({reason})", name_of(*uuid)),
+                            Msg::new("log.deleted")
+                                .arg("name", name_of(*uuid))
+                                .arg_msg("reason", &reason.msg()),
                         )
                         .await;
                     }
@@ -459,7 +461,9 @@ async fn apply_retention(
                             &state.database,
                             server_uuid,
                             "error",
-                            format!("\"{}\" konnte nicht gelöscht werden: {err:#}", name_of(*uuid)),
+                            Msg::new("log.delete_failed")
+                                .arg("name", name_of(*uuid))
+                                .arg_msg("error", &Msg::from_error(&err)),
                         )
                         .await;
                     }
@@ -542,6 +546,6 @@ async fn log_activity(state: &State, server_uuid: uuid::Uuid, event: &str, data:
     )
     .await
     {
-        tracing::warn!(server = %server_uuid, "backup-plus: Aktivität nicht protokolliert: {err:#?}");
+        tracing::warn!(server = %server_uuid, "backup-plus: failed to log activity: {err:#?}");
     }
 }

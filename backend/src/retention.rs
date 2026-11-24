@@ -37,6 +37,32 @@ pub struct BackupSpec {
     pub locked: bool,
 }
 
+/// Warum ein Backup gelöscht wird (wird in Oberfläche und Protokoll übersetzt).
+#[derive(ToSchema, Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum DeleteReason {
+    /// Das Backup ist fehlgeschlagen.
+    Failed,
+    /// Älter als das Höchstalter der Routine.
+    TooOld { routine: String },
+    /// Nicht mehr unter den neuesten `keep` Backups der Routine.
+    OverKeep { routine: String, keep: i32 },
+}
+
+impl DeleteReason {
+    pub fn msg(&self) -> crate::i18n::Msg {
+        use crate::i18n::Msg;
+
+        match self {
+            DeleteReason::Failed => Msg::new("reason.failed"),
+            DeleteReason::TooOld { routine } => Msg::new("reason.too_old").arg("routine", routine),
+            DeleteReason::OverKeep { routine, keep } => Msg::new("reason.over_keep")
+                .arg("routine", routine)
+                .arg("keep", keep),
+        }
+    }
+}
+
 #[derive(ToSchema, Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum PlannedAction {
@@ -45,7 +71,7 @@ pub enum PlannedAction {
     /// Backup wechselt in eine andere Routine.
     Move { from: uuid::Uuid, to: uuid::Uuid },
     /// Backup wird gelöscht.
-    Delete { reason: String },
+    Delete { reason: DeleteReason },
     /// Backup ist angepinnt (gesperrt) und wird nie automatisch gelöscht.
     Pinned,
     /// Backup läuft noch.
@@ -129,7 +155,7 @@ pub fn plan(
                 backup.uuid,
                 if delete_failed {
                     PlannedAction::Delete {
-                        reason: "Backup ist fehlgeschlagen".into(),
+                        reason: DeleteReason::Failed,
                     }
                 } else {
                     PlannedAction::FailedKept
@@ -206,12 +232,14 @@ pub fn plan(
                     uuid,
                     PlannedAction::Delete {
                         reason: if too_old {
-                            format!("älter als das Höchstalter der Routine \"{}\"", routine.name)
+                            DeleteReason::TooOld {
+                                routine: routine.name.clone(),
+                            }
                         } else {
-                            format!(
-                                "älter als die {} neuesten Backups der Routine \"{}\"",
-                                routine.keep, routine.name
-                            )
+                            DeleteReason::OverKeep {
+                                routine: routine.name.clone(),
+                                keep: routine.keep,
+                            }
                         },
                     },
                 )),
@@ -317,7 +345,7 @@ mod tests {
 
         assert_eq!(count(&plan, |a| matches!(a, PlannedAction::Keep { .. })), 5);
         assert_eq!(plan.action_for(id(103)), Some(&PlannedAction::Delete {
-            reason: "älter als die 3 neuesten Backups der Routine \"Stündlich\"".into()
+            reason: DeleteReason::OverKeep { routine: "Stündlich".into(), keep: 3 }
         }));
     }
 

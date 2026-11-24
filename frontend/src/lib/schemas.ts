@@ -3,10 +3,17 @@ import { z } from 'zod';
 export const routineSourceSchema = z.enum(['create', 'promote']);
 export type RoutineSource = z.infer<typeof routineSourceSchema>;
 
+export const deleteReasonSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('failed') }),
+  z.object({ kind: z.literal('too_old'), routine: z.string() }),
+  z.object({ kind: z.literal('over_keep'), routine: z.string(), keep: z.number() }),
+]);
+export type DeleteReason = z.infer<typeof deleteReasonSchema>;
+
 export const plannedActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('keep'), routine: z.string() }),
   z.object({ type: z.literal('move'), from: z.string(), to: z.string() }),
-  z.object({ type: z.literal('delete'), reason: z.string() }),
+  z.object({ type: z.literal('delete'), reason: deleteReasonSchema }),
   z.object({ type: z.literal('pinned') }),
   z.object({ type: z.literal('running') }),
   z.object({ type: z.literal('failed_kept') }),
@@ -147,18 +154,18 @@ export const adminOverviewSchema = z.object({
 });
 export type AdminOverview = z.infer<typeof adminOverviewSchema>;
 
-/** Häufige Zeitpläne (6 Felder: Sekunde Minute Stunde Tag Monat Wochentag). */
-export const cronPresets: { label: string; value: string }[] = [
-  { label: 'Stündlich (zur vollen Stunde)', value: '0 0 * * * *' },
-  { label: 'Alle 2 Stunden', value: '0 0 */2 * * *' },
-  { label: 'Alle 6 Stunden', value: '0 0 */6 * * *' },
-  { label: 'Alle 12 Stunden', value: '0 0 */12 * * *' },
-  { label: 'Täglich um 00:00', value: '0 0 0 * * *' },
-  { label: 'Täglich um 04:00', value: '0 0 4 * * *' },
-  { label: 'Wöchentlich, Montag 00:00', value: '0 0 0 * * 1' },
-  { label: 'Wöchentlich, Sonntag 03:00', value: '0 0 3 * * 0' },
-  { label: 'Monatlich, am 1. um 00:00', value: '0 0 0 1 * *' },
-];
+/** Common schedules (6 fields: second minute hour day month weekday); labels live in translations.ts. */
+export const cronPresets = [
+  { key: 'hourly', value: '0 0 * * * *' },
+  { key: 'every2h', value: '0 0 */2 * * *' },
+  { key: 'every6h', value: '0 0 */6 * * *' },
+  { key: 'every12h', value: '0 0 */12 * * *' },
+  { key: 'daily0', value: '0 0 0 * * *' },
+  { key: 'daily4', value: '0 0 4 * * *' },
+  { key: 'weeklyMonday', value: '0 0 0 * * 1' },
+  { key: 'weeklySunday', value: '0 0 3 * * 0' },
+  { key: 'monthly', value: '0 0 0 1 * *' },
+] as const;
 
 export const routineColors = ['blue', 'violet', 'orange', 'teal', 'pink', 'cyan', 'lime', 'grape', 'yellow', 'indigo'];
 
@@ -171,7 +178,7 @@ export function formatBytes(bytes: number): string {
 
 export function formatDate(date: Date | null): string {
   if (!date) return '–';
-  return date.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+  return date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 }
 
 let keyCounter = 0;

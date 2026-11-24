@@ -4,6 +4,7 @@ import type { IconLike } from '@/elements/data-display/Icon.tsx';
 import AdminPage from './AdminPage.tsx';
 import CardSummary from './CardSummary.tsx';
 import ServerPage from './ServerPage.tsx';
+import { getExtTranslations } from './translations.ts';
 
 class DevBackupplusGfsbackupsExtension extends Extension {
   public cardConfigurationPage: React.FC | null = AdminPage;
@@ -14,7 +15,7 @@ class DevBackupplusGfsbackupsExtension extends Extension {
   public initialize(ctx: ExtensionContext): void {
     ctx.extensionRegistry.enterRoutes((routes) =>
       routes.addServerRoute({
-        name: 'Auto-Backups',
+        name: () => getExtTranslations().t('server.title', {}),
         icon: faClockRotateLeft,
         path: '/backup-plus',
         element: ServerPage,

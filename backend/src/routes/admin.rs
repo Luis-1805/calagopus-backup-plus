@@ -50,7 +50,10 @@ mod settings {
             (status = OK, body = inline(Response)),
             (status = UNAUTHORIZED, body = ApiError),
         ))]
-        pub async fn route(state: GetState, permissions: GetPermissionManager) -> ApiResponseResult {
+        pub async fn route(
+            state: GetState,
+            permissions: GetPermissionManager,
+        ) -> ApiResponseResult {
             permissions.has_admin_permission("extensions.read")?;
 
             let s = crate::settings::load(&state).await;
@@ -91,6 +94,7 @@ mod settings {
         pub async fn route(
             state: GetState,
             permissions: GetPermissionManager,
+            user: shared::models::user::GetUser,
             activity_logger: GetAdminActivityLogger,
             shared::Payload(data): shared::Payload<super::GeneralSettings>,
         ) -> ApiResponseResult {
@@ -101,6 +105,7 @@ mod settings {
             }
 
             permissions.has_admin_permission("extensions.manage")?;
+            let lang = crate::i18n::Lang::from_code(&user.language);
 
             {
                 let mut settings = state.settings.get_mut().await?;
@@ -108,9 +113,9 @@ mod settings {
                     settings.find_mut_extension_settings()?;
 
                 if !data.default_template_id.is_empty()
-                    && ext.find_template(&data.default_template_id).is_none()
+                    && ext.find_template(&data.default_template_id, lang).is_none()
                 {
-                    return ApiResponse::error("Die Standard-Vorlage existiert nicht.").ok();
+                    return ApiResponse::error(crate::i18n::t("err.default_template_missing", lang)).ok();
                 }
 
                 ext.enabled = data.enabled;
@@ -167,11 +172,16 @@ mod templates {
             (status = OK, body = inline(Response)),
             (status = UNAUTHORIZED, body = ApiError),
         ))]
-        pub async fn route(state: GetState, permissions: GetPermissionManager) -> ApiResponseResult {
+        pub async fn route(
+            state: GetState,
+            permissions: GetPermissionManager,
+            user: shared::models::user::GetUser,
+        ) -> ApiResponseResult {
             permissions.has_admin_permission("extensions.read")?;
+            let lang = crate::i18n::Lang::from_code(&user.language);
 
             ApiResponse::new_serialized(Response {
-                templates: crate::settings::load(&state).await.all_templates(),
+                templates: crate::settings::load(&state).await.all_templates(lang),
             })
             .ok()
         }
@@ -211,6 +221,7 @@ mod templates {
         pub async fn route(
             state: GetState,
             permissions: GetPermissionManager,
+            user: shared::models::user::GetUser,
             activity_logger: GetAdminActivityLogger,
             shared::Payload(data): shared::Payload<Payload>,
         ) -> ApiResponseResult {
@@ -221,9 +232,10 @@ mod templates {
             }
 
             permissions.has_admin_permission("extensions.manage")?;
+            let lang = crate::i18n::Lang::from_code(&user.language);
 
             let builtin_ids: HashSet<String> =
-                templates::builtin().into_iter().map(|t| t.id).collect();
+                templates::builtin(lang).into_iter().map(|t| t.id).collect();
             let custom: Vec<Template> = data
                 .templates
                 .into_iter()
@@ -234,17 +246,34 @@ mod templates {
             let settings = crate::settings::load(&state).await;
             for template in &custom {
                 if !ids.insert(template.id.clone()) {
-                    return ApiResponse::error(format!("Die Vorlagen-ID \"{}\" ist doppelt.", template.id)).ok();
+                    return ApiResponse::error(
+                        crate::i18n::Msg::new("err.duplicate_template_id")
+                            .arg("id", &template.id)
+                            .render(lang),
+                    )
+                    .ok();
                 }
 
                 let routines = match templates::to_routines(template, uuid::Uuid::nil()) {
                     Ok(routines) => routines,
                     Err(err) => {
-                        return ApiResponse::error(format!("Vorlage \"{}\": {err}", template.name)).ok();
+                        return ApiResponse::error(
+                            crate::i18n::Msg::new("err.template_invalid")
+                                .arg("template", &template.name)
+                                .arg_msg("error", &err)
+                                .render(lang),
+                        )
+                        .ok();
                     }
                 };
                 if let Err(err) = validation::validate(&routines, &settings, None) {
-                    return ApiResponse::error(format!("Vorlage \"{}\": {err}", template.name)).ok();
+                    return ApiResponse::error(
+                            crate::i18n::Msg::new("err.template_invalid")
+                                .arg("template", &template.name)
+                                .arg_msg("error", &err)
+                                .render(lang),
+                        )
+                        .ok();
                 }
             }
 
@@ -253,7 +282,7 @@ mod templates {
                 let ext: &mut crate::settings::ExtensionSettingsData =
                     settings.find_mut_extension_settings()?;
                 ext.templates = custom.clone();
-                if ext.find_template(&ext.default_template_id.clone()).is_none() {
+                if ext.find_template(&ext.default_template_id.clone(), lang).is_none() {
                     ext.default_template_id = templates::DEFAULT_TEMPLATE_ID.into();
                 }
                 settings.save().await?;
@@ -267,7 +296,7 @@ mod templates {
                 .await;
 
             ApiResponse::new_serialized(Response {
-                templates: templates::all(&custom),
+                templates: templates::all(&custom, lang),
             })
             .ok()
         }
@@ -331,14 +360,16 @@ mod apply_template {
         pub async fn route(
             state: GetState,
             permissions: GetPermissionManager,
+            user: shared::models::user::GetUser,
             activity_logger: GetAdminActivityLogger,
             shared::Payload(data): shared::Payload<Payload>,
         ) -> ApiResponseResult {
             permissions.has_admin_permission("extensions.manage")?;
+            let lang = crate::i18n::Lang::from_code(&user.language);
 
             let settings = crate::settings::load(&state).await;
-            let Some(template) = settings.find_template(&data.template_id) else {
-                return ApiResponse::error("Vorlage nicht gefunden.").ok();
+            let Some(template) = settings.find_template(&data.template_id, lang) else {
+                return ApiResponse::error(crate::i18n::t("err.template_not_found", lang)).ok();
             };
 
             let mut applied = 0;
@@ -351,7 +382,7 @@ mod apply_template {
 
                 let routines = match templates::to_routines(&template, server.uuid) {
                     Ok(routines) => routines,
-                    Err(err) => return ApiResponse::error(err).ok(),
+                    Err(err) => return ApiResponse::error(err.render(lang)).ok(),
                 };
                 if let Err(err) = validation::validate(
                     &routines,
@@ -361,7 +392,7 @@ mod apply_template {
                         timezone: schedule::server_timezone(server.timezone.as_deref()),
                     }),
                 ) {
-                    skipped.push(format!("{}: {err}", server.name));
+                    skipped.push(format!("{}: {}", server.name, err.render(lang)));
                     continue;
                 }
 
@@ -378,7 +409,7 @@ mod apply_template {
                     &state.database,
                     server.uuid,
                     "info",
-                    format!("Vorlage \"{}\" vom Admin angewendet", template.name),
+                    crate::i18n::Msg::new("log.template_applied_admin").arg("template", &template.name),
                 )
                 .await;
                 applied += 1;
@@ -430,7 +461,10 @@ mod overview {
             (status = OK, body = inline(Response)),
             (status = UNAUTHORIZED, body = ApiError),
         ))]
-        pub async fn route(state: GetState, permissions: GetPermissionManager) -> ApiResponseResult {
+        pub async fn route(
+            state: GetState,
+            permissions: GetPermissionManager,
+        ) -> ApiResponseResult {
             permissions.has_admin_permission("extensions.read")?;
 
             ApiResponse::new_serialized(Response {

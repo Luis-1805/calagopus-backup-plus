@@ -35,6 +35,7 @@ import { useServerStore } from '@/stores/server.ts';
 import { applyTemplate, getOverview, runNow, setBackupRoutine, setPinned, updateConfig } from './api.ts';
 import RoutineListEditor, { cleanRoutines, routineColor } from './components/RoutineListEditor.tsx';
 import {
+  type DeleteReason,
   formatBytes,
   formatDate,
   type ManagedBackup,
@@ -42,6 +43,7 @@ import {
   type PlannedAction,
   type RoutineInput,
 } from './lib/schemas.ts';
+import { useExtTranslations } from './translations.ts';
 
 const REFRESH_MS = 30_000;
 
@@ -64,6 +66,7 @@ function toInputs(overview: Overview): RoutineInput[] {
 export default function ServerPage() {
   const serverUuid = useServerStore((state) => state.server.uuid);
   const { addToast } = useToast();
+  const { t: tExt } = useExtTranslations();
 
   const [overview, setOverview] = useState<Overview | null>(null);
   const [routines, setRoutines] = useState<RoutineInput[]>([]);
@@ -106,14 +109,28 @@ export default function ServerPage() {
     return map;
   }, [overview]);
 
-  const routineName = (uuid: string | null) => (uuid ? (routineIndex.get(uuid)?.name ?? '?') : null);
+  const routineName = (uuid: string | null) => (uuid ? (routineIndex.get(uuid)?.name ?? '?') : '');
+
+  const nextRunLabel = (enabledRoutine: boolean, nextRun: Date | null) =>
+    !enabledRoutine ? tExt('common.paused', {}) : nextRun ? formatDate(nextRun) : tExt('common.soon', {});
+
+  const reasonText = (reason: DeleteReason) => {
+    switch (reason.kind) {
+      case 'failed':
+        return tExt('reason.failed', {});
+      case 'too_old':
+        return tExt('reason.tooOld', { routine: reason.routine });
+      case 'over_keep':
+        return tExt('reason.overKeep', { routine: reason.routine, keep: reason.keep });
+    }
+  };
 
   const doSave = () => {
     setSaving(true);
     updateConfig(serverUuid, { enabled, deleteFailed, routines: cleanRoutines(routines) })
       .then((data) => {
         applyOverview(data, true);
-        addToast(enabled ? 'Gespeichert. Automatische Backups sind aktiv.' : 'Gespeichert (pausiert).', 'success');
+        addToast(enabled ? tExt('server.toast.saved', {}) : tExt('server.toast.savedPaused', {}), 'success');
       })
       .catch((err) => addToast(httpErrorToHuman(err), 'error'))
       .finally(() => setSaving(false));
@@ -124,9 +141,7 @@ export default function ServerPage() {
     const template = overview.templates.find((t) => t.id === templateId);
     if (
       overview.routines.length > 0 &&
-      !window.confirm(
-        `Vorlage "${template?.name}" anwenden? Die bisherigen Routinen werden ersetzt. Vorhandene Backups bleiben erhalten, werden aber keiner Routine mehr zugeordnet.`,
-      )
+      !window.confirm(tExt('server.setup.confirmTemplate', { name: template?.name ?? templateId }))
     ) {
       return;
     }
@@ -135,7 +150,7 @@ export default function ServerPage() {
     applyTemplate(serverUuid, templateId, true)
       .then((data) => {
         applyOverview(data, true);
-        addToast(`Vorlage "${template?.name}" angewendet und aktiviert.`, 'success');
+        addToast(tExt('server.toast.templateApplied', { name: template?.name ?? templateId }), 'success');
       })
       .catch((err) => addToast(httpErrorToHuman(err), 'error'))
       .finally(() => setSaving(false));
@@ -145,7 +160,7 @@ export default function ServerPage() {
     setRunning(routineUuid ?? 'any');
     runNow(serverUuid, routineUuid)
       .then(() => {
-        addToast('Backup gestartet.', 'success');
+        addToast(tExt('server.toast.backupStarted', {}), 'success');
         load(false);
       })
       .catch((err) => addToast(httpErrorToHuman(err), 'error'))
@@ -155,7 +170,7 @@ export default function ServerPage() {
   const doPin = (backup: ManagedBackup) => {
     setPinned(serverUuid, backup.uuid, !backup.locked)
       .then(() => {
-        addToast(backup.locked ? 'Backup losgelöst.' : 'Backup angepinnt – es wird nie automatisch gelöscht.', 'success');
+        addToast(backup.locked ? tExt('server.toast.unpinned', {}) : tExt('server.toast.pinned', {}), 'success');
         load(false);
       })
       .catch((err) => addToast(httpErrorToHuman(err), 'error'));
@@ -164,7 +179,12 @@ export default function ServerPage() {
   const doAssign = (backup: ManagedBackup, routineUuid: string | null) => {
     setBackupRoutine(serverUuid, backup.uuid, routineUuid)
       .then(() => {
-        addToast(routineUuid ? `Backup "${routineName(routineUuid)}" zugeordnet.` : 'Backup aus der Rotation genommen.', 'success');
+        addToast(
+          routineUuid
+            ? tExt('server.toast.assigned', { routine: routineName(routineUuid) })
+            : tExt('server.toast.unassigned', {}),
+          'success',
+        );
         load(false);
       })
       .catch((err) => addToast(httpErrorToHuman(err), 'error'));
@@ -175,46 +195,46 @@ export default function ServerPage() {
       case 'keep':
         return (
           <Badge color='green' variant='light'>
-            Bleibt
+            {tExt('server.planned.keep', {})}
           </Badge>
         );
       case 'move':
         return (
           <Badge color={routineIndex.get(action.to)?.color ?? 'blue'} variant='light'>
-            Wird „{routineName(action.to)}“
+            {tExt('server.planned.move', { routine: routineName(action.to) })}
           </Badge>
         );
       case 'delete':
         return (
-          <Tooltip label={action.reason}>
+          <Tooltip label={reasonText(action.reason)}>
             <Badge color='red' variant='light'>
-              Wird gelöscht
+              {tExt('server.planned.delete', {})}
             </Badge>
           </Tooltip>
         );
       case 'pinned':
         return (
           <Badge color='yellow' variant='light' leftSection={<FontAwesomeIcon icon={faThumbtack} />}>
-            Angepinnt
+            {tExt('server.planned.pinned', {})}
           </Badge>
         );
       case 'running':
         return (
           <Badge color='gray' variant='light' leftSection={<Loader size={10} />}>
-            Läuft
+            {tExt('server.planned.running', {})}
           </Badge>
         );
       case 'failed_kept':
         return (
           <Badge color='red' variant='outline'>
-            Fehlgeschlagen
+            {tExt('server.planned.failedKept', {})}
           </Badge>
         );
       case 'unassigned':
         return (
-          <Tooltip label='Gehört zu keiner aktiven Routine und wird nicht automatisch gelöscht.'>
+          <Tooltip label={tExt('server.planned.unassignedTooltip', {})}>
             <Badge color='gray' variant='outline'>
-              Nicht verwaltet
+              {tExt('server.planned.unassigned', {})}
             </Badge>
           </Tooltip>
         );
@@ -223,7 +243,7 @@ export default function ServerPage() {
 
   if (!overview) {
     return (
-      <ServerContentContainer title='Auto-Backups'>
+      <ServerContentContainer title={tExt('server.title', {})}>
         <Group justify='center' p='xl'>
           <Loader />
         </Group>
@@ -236,14 +256,10 @@ export default function ServerPage() {
   const limitTooLow = limits.backupLimit < keepTotal;
   const routineErrors = overview.routines.filter((r) => r.lastError);
   const selectedTemplate = overview.templates.find((t) => t.id === templateId);
-  const changed = (fn: () => void) => () => {
-    fn();
-    setDirty(true);
-  };
 
   return (
     <ServerContentContainer
-      title='Auto-Backups'
+      title={tExt('server.title', {})}
       contentRight={
         <ServerCan action='backup-plus.manage'>
           <Button
@@ -252,64 +268,65 @@ export default function ServerPage() {
             disabled={!overview.routines.some((r) => r.source === 'create')}
             onClick={() => doRunNow(null)}
           >
-            Jetzt sichern
+            {tExt('server.button.runNow', {})}
           </Button>
         </ServerCan>
       }
     >
       <Stack>
         {!limits.globallyEnabled && (
-          <Alert color='yellow' title='Global deaktiviert'>
-            Ein Administrator hat Backup Plus pausiert. Es werden derzeit keine automatischen Backups erstellt oder
-            gelöscht.
+          <Alert color='yellow' title={tExt('server.alert.globallyDisabledTitle', {})}>
+            {tExt('server.alert.globallyDisabled', {})}
           </Alert>
         )}
         {policy.lastError && (
-          <Alert color='red' title='Letzter Lauf fehlgeschlagen'>
+          <Alert color='red' title={tExt('server.alert.lastRunFailed', {})}>
             {policy.lastError}
           </Alert>
         )}
         {routineErrors.map((r) => (
-          <Alert key={r.uuid} color='orange' title={`Routine „${r.name}“`}>
+          <Alert key={r.uuid} color='orange' title={tExt('server.alert.routineError', { name: r.name })}>
             {r.lastError}
           </Alert>
         ))}
 
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-          <TitleCard title='Status' icon={faRotate}>
+          <TitleCard title={tExt('server.card.status', {})} icon={faRotate}>
             <Stack gap={4}>
               <Group gap='xs'>
-                <Badge color={policy.enabled ? 'green' : 'gray'}>{policy.enabled ? 'Aktiv' : 'Pausiert'}</Badge>
+                <Badge color={policy.enabled ? 'green' : 'gray'}>
+                  {policy.enabled ? tExt('server.card.active', {}) : tExt('server.card.paused', {})}
+                </Badge>
               </Group>
               <Text size='sm' c='dimmed'>
-                Letzter Lauf: {formatDate(policy.lastRun)}
+                {tExt('server.card.lastRun', { time: formatDate(policy.lastRun) })}
               </Text>
               <Text size='sm' c='dimmed'>
-                Zeitzone: {overview.timezone}
+                {tExt('server.card.timezone', { timezone: overview.timezone })}
               </Text>
             </Stack>
           </TitleCard>
-          <TitleCard title='Verwaltete Backups' icon={faListUl}>
+          <TitleCard title={tExt('server.card.managed', {})} icon={faListUl}>
             <Text size='xl' fw={600}>
               {backups.filter((b) => b.planned.type !== 'delete').length}
             </Text>
             <Text size='sm' c='dimmed'>
-              {formatBytes(backups.reduce((sum, b) => sum + b.bytes, 0))} belegt
+              {tExt('server.card.used', { size: formatBytes(backups.reduce((sum, b) => sum + b.bytes, 0)) })}
             </Text>
           </TitleCard>
-          <TitleCard title='Backup-Limit' icon={faLayerGroup}>
+          <TitleCard title={tExt('server.card.limit', {})} icon={faLayerGroup}>
             <Text size='xl' fw={600} c={limitTooLow ? 'red' : undefined}>
               {limits.backupsTotal} / {limits.backupLimit}
             </Text>
             <Text size='sm' c='dimmed'>
-              alle Backups dieses Servers
+              {tExt('server.card.limitHint', {})}
             </Text>
           </TitleCard>
-          <TitleCard title='Routinen' icon={faClockRotateLeft}>
+          <TitleCard title={tExt('server.card.routines', {})} icon={faClockRotateLeft}>
             <Stack gap={2}>
               {overview.routines.length === 0 && (
                 <Text size='sm' c='dimmed'>
-                  keine
+                  {tExt('common.none', {})}
                 </Text>
               )}
               {overview.routines.map((r, i) => (
@@ -318,7 +335,7 @@ export default function ServerPage() {
                     {r.backupCount}/{r.keepCount}
                   </Badge>
                   <Text size='sm' truncate>
-                    {r.name} · nächster: {r.enabled ? (r.nextRun ? formatDate(r.nextRun) : 'gleich') : 'pausiert'}
+                    {tExt('server.card.routineLine', { name: r.name, next: nextRunLabel(r.enabled, r.nextRun) })}
                   </Text>
                 </Group>
               ))}
@@ -327,11 +344,11 @@ export default function ServerPage() {
         </SimpleGrid>
 
         <ServerCan action='backup-plus.manage'>
-          <TitleCard title='Einrichtung' icon={faGear}>
+          <TitleCard title={tExt('server.setup.title', {})} icon={faGear}>
             <Stack>
               <Group align='flex-end' wrap='wrap'>
                 <Select
-                  label='Vorlage'
+                  label={tExt('server.setup.template', {})}
                   description={selectedTemplate?.description}
                   className='flex-1'
                   style={{ minWidth: 260 }}
@@ -339,55 +356,52 @@ export default function ServerPage() {
                   value={templateId}
                   data={overview.templates.map((t) => ({
                     value: t.id,
-                    label: t.builtin ? t.name : `${t.name} (eigene)`,
+                    label: t.builtin ? t.name : tExt('server.setup.customTemplate', { name: t.name }),
                   }))}
                   onChange={setTemplateId}
                 />
                 <Button variant='light' loading={saving} disabled={!templateId} onClick={doApplyTemplate}>
-                  Vorlage anwenden
+                  {tExt('server.button.applyTemplate', {})}
                 </Button>
               </Group>
 
               <Group>
                 <Switch
-                  label='Automatische Backups aktiv'
+                  label={tExt('server.setup.enabled', {})}
                   checked={enabled}
                   onChange={(e) => {
-                    const value = e.currentTarget.checked;
-                    changed(() => setEnabled(value))();
+                    setEnabled(e.currentTarget.checked);
+                    setDirty(true);
                   }}
                 />
                 <Switch
-                  label='Fehlgeschlagene Backups automatisch löschen'
+                  label={tExt('server.setup.deleteFailed', {})}
                   checked={deleteFailed}
                   onChange={(e) => {
-                    const value = e.currentTarget.checked;
-                    changed(() => setDeleteFailed(value))();
+                    setDeleteFailed(e.currentTarget.checked);
+                    setDirty(true);
                   }}
                 />
               </Group>
 
               {limitTooLow && (
                 <Alert color='red'>
-                  Das Backup-Limit dieses Servers ({limits.backupLimit}) ist kleiner als die Summe der behaltenen
-                  Backups ({keepTotal}). Bitte einen Administrator, das Limit zu erhöhen (empfohlen: {keepTotal + 1}).
+                  {tExt('server.alert.limitTooLow', {
+                    limit: limits.backupLimit,
+                    total: keepTotal,
+                    recommended: keepTotal + 1,
+                  })}
                 </Alert>
               )}
-              {!limits.canCustomize && (
-                <Alert color='blue'>
-                  Eigene Routinen sind vom Administrator deaktiviert – du kannst eine der Vorlagen anwenden.
-                </Alert>
-              )}
+              {!limits.canCustomize && <Alert color='blue'>{tExt('server.alert.customDisabled', {})}</Alert>}
             </Stack>
           </TitleCard>
         </ServerCan>
 
-        <TitleCard title='Routinen' icon={faClockRotateLeft}>
+        <TitleCard title={tExt('server.routines.title', {})} icon={faClockRotateLeft}>
           <Stack>
             <Text size='sm' c='dimmed'>
-              Jede Routine behält ihre neuesten Backups. Eine Routine vom Typ „übernehmen“ erstellt keine eigenen
-              Backups: Fällt ein Backup aus ihrer Quelle heraus und sie ist laut Zeitplan dran, wird es übernommen
-              statt gelöscht – so entstehen z. B. wöchentliche und monatliche Backups ohne Zusatzaufwand.
+              {tExt('server.routines.intro', {})}
             </Text>
             <RoutineListEditor
               routines={routines}
@@ -404,8 +418,12 @@ export default function ServerPage() {
                 return (
                   <Group gap='md'>
                     <Text size='xs' c='dimmed'>
-                      Backups: {saved.backupCount}/{saved.keepCount} · letzter Lauf: {formatDate(saved.lastRun)} ·
-                      nächster: {saved.enabled ? (saved.nextRun ? formatDate(saved.nextRun) : 'gleich') : 'pausiert'}
+                      {tExt('server.routines.status', {
+                        count: saved.backupCount,
+                        keep: saved.keepCount,
+                        last: formatDate(saved.lastRun),
+                        next: nextRunLabel(saved.enabled, saved.nextRun),
+                      })}
                     </Text>
                     {saved.source === 'create' && (
                       <ServerCan action='backup-plus.manage'>
@@ -415,7 +433,7 @@ export default function ServerPage() {
                           loading={running === saved.uuid}
                           onClick={() => doRunNow(saved.uuid)}
                         >
-                          Jetzt ausführen
+                          {tExt('server.button.runRoutine', {})}
                         </Button>
                       </ServerCan>
                     )}
@@ -426,11 +444,11 @@ export default function ServerPage() {
             <ServerCan action='backup-plus.manage'>
               <Group>
                 <Button loading={saving} disabled={!dirty} onClick={doSave}>
-                  Speichern
+                  {tExt('server.button.save', {})}
                 </Button>
                 {dirty && (
-                  <Button variant='subtle' onClick={() => overview && applyOverview(overview, true)}>
-                    Änderungen verwerfen
+                  <Button variant='subtle' onClick={() => applyOverview(overview, true)}>
+                    {tExt('server.button.discard', {})}
                   </Button>
                 )}
               </Group>
@@ -438,21 +456,21 @@ export default function ServerPage() {
           </Stack>
         </TitleCard>
 
-        <TitleCard title='Verwaltete Backups' icon={faListUl}>
+        <TitleCard title={tExt('server.backups.title', {})} icon={faListUl}>
           {backups.length === 0 ? (
             <Text c='dimmed' size='sm'>
-              Noch keine automatischen Backups vorhanden.
+              {tExt('server.backups.empty', {})}
             </Text>
           ) : (
             <Table.ScrollContainer minWidth={760}>
               <Table striped highlightOnHover>
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>Name</Table.Th>
-                    <Table.Th>Routine</Table.Th>
-                    <Table.Th>Erstellt</Table.Th>
-                    <Table.Th>Größe</Table.Th>
-                    <Table.Th>Nächste Aktion</Table.Th>
+                    <Table.Th>{tExt('server.backups.name', {})}</Table.Th>
+                    <Table.Th>{tExt('server.backups.routine', {})}</Table.Th>
+                    <Table.Th>{tExt('server.backups.created', {})}</Table.Th>
+                    <Table.Th>{tExt('server.backups.size', {})}</Table.Th>
+                    <Table.Th>{tExt('server.backups.nextAction', {})}</Table.Th>
                     <Table.Th />
                   </Table.Tr>
                 </Table.Thead>
@@ -474,18 +492,20 @@ export default function ServerPage() {
                             </Badge>
                           ) : (
                             <Text size='sm' c='dimmed'>
-                              –
+                              {tExt('common.notAvailable', {})}
                             </Text>
                           )}
                         </Table.Td>
                         <Table.Td>{formatDate(backup.created)}</Table.Td>
-                        <Table.Td>{backup.completed ? formatBytes(backup.bytes) : '–'}</Table.Td>
+                        <Table.Td>
+                          {backup.completed ? formatBytes(backup.bytes) : tExt('common.notAvailable', {})}
+                        </Table.Td>
                         <Table.Td>{plannedBadge(backup.planned)}</Table.Td>
                         <Table.Td>
                           <ServerCan action='backup-plus.manage'>
                             <Menu position='bottom-end' withinPortal>
                               <Menu.Target>
-                                <ActionIcon variant='subtle' aria-label='Aktionen'>
+                                <ActionIcon variant='subtle' aria-label={tExt('server.backups.actions', {})}>
                                   <FontAwesomeIcon icon={faEllipsisVertical} />
                                 </ActionIcon>
                               </Menu.Target>
@@ -494,10 +514,10 @@ export default function ServerPage() {
                                   leftSection={<FontAwesomeIcon icon={faThumbtack} />}
                                   onClick={() => doPin(backup)}
                                 >
-                                  {backup.locked ? 'Loslösen' : 'Anpinnen (nie löschen)'}
+                                  {backup.locked ? tExt('server.backups.unpin', {}) : tExt('server.backups.pin', {})}
                                 </Menu.Item>
                                 <Menu.Divider />
-                                <Menu.Label>Routine zuordnen</Menu.Label>
+                                <Menu.Label>{tExt('server.backups.assign', {})}</Menu.Label>
                                 {overview.routines.map((r) => (
                                   <Menu.Item
                                     key={r.uuid}
@@ -511,7 +531,7 @@ export default function ServerPage() {
                                   disabled={backup.routineUuid === null}
                                   onClick={() => doAssign(backup, null)}
                                 >
-                                  Keine (aus Rotation nehmen)
+                                  {tExt('server.backups.assignNone', {})}
                                 </Menu.Item>
                               </Menu.Dropdown>
                             </Menu>
@@ -526,10 +546,10 @@ export default function ServerPage() {
           )}
         </TitleCard>
 
-        <TitleCard title='Protokoll' icon={faClockRotateLeft}>
+        <TitleCard title={tExt('server.log.title', {})} icon={faClockRotateLeft}>
           {log.length === 0 ? (
             <Text c='dimmed' size='sm'>
-              Noch keine Einträge.
+              {tExt('server.log.empty', {})}
             </Text>
           ) : (
             <Stack gap={4}>

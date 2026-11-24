@@ -30,8 +30,9 @@ import {
   type RoutineInput,
   type Template,
 } from './lib/schemas.ts';
+import { useExtTranslations } from './translations.ts';
 
-/** Vorlage im Editor: Routinen mit Schlüsseln statt Namen als Quellverweis. */
+/** A template in the editor: routines reference their source by key instead of by name. */
 interface TemplateDraft {
   id: string;
   name: string;
@@ -99,6 +100,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 
 export default function AdminPage() {
   const { addToast } = useToast();
+  const { t: tExt } = useExtTranslations();
   const [saving, setSaving] = useState(false);
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -146,7 +148,7 @@ export default function AdminPage() {
   const doSaveSettings = (values: AdminSettings) => {
     setSaving(true);
     updateAdminSettings(values)
-      .then(() => addToast('Einstellungen gespeichert.', 'success'))
+      .then(() => addToast(tExt('admin.settings.saved', {}), 'success'))
       .catch((err) => addToast(httpErrorToHuman(err), 'error'))
       .finally(() => setSaving(false));
   };
@@ -156,7 +158,7 @@ export default function AdminPage() {
     updateTemplates(drafts.map(fromDraft))
       .then((list) => {
         applyTemplates(list);
-        addToast('Vorlagen gespeichert.', 'success');
+        addToast(tExt('admin.templates.saved', {}), 'success');
       })
       .catch((err) => addToast(httpErrorToHuman(err), 'error'))
       .finally(() => setSaving(false));
@@ -169,10 +171,15 @@ export default function AdminPage() {
 
   const addDraft = (base?: Template) => {
     const draft: TemplateDraft = base
-      ? { ...toDraft(base), id: `${base.id}-kopie`, name: `${base.name} (Kopie)`, builtin: false }
+      ? {
+          ...toDraft(base),
+          id: `${base.id}-copy`,
+          name: tExt('admin.templates.copySuffix', { name: base.name }),
+          builtin: false,
+        }
       : {
-          id: `vorlage-${drafts.length + 1}`,
-          name: `Eigene Vorlage ${drafts.length + 1}`,
+          id: `template-${drafts.length + 1}`,
+          name: tExt('admin.templates.defaultName', { number: drafts.length + 1 }),
           description: '',
           builtin: false,
           routines: [emptyRoutine(0)],
@@ -184,26 +191,28 @@ export default function AdminPage() {
   const doBulkApply = () => {
     const template = templates.find((t) => t.id === bulkTemplate);
     if (!template) return;
-    if (
-      !window.confirm(
-        `Vorlage "${template.name}" auf ${bulkOnlyUnconfigured ? 'alle noch nicht eingerichteten' : 'ALLE'} Server anwenden?` +
-          (bulkOnlyUnconfigured ? '' : ' Bestehende Routinen werden ersetzt.'),
-      )
-    ) {
+    const question = bulkOnlyUnconfigured
+      ? tExt('admin.bulk.confirmUnconfigured', { name: template.name })
+      : tExt('admin.bulk.confirmAll', { name: template.name });
+    if (!window.confirm(question)) {
       return;
     }
 
     setBulkRunning(true);
     applyTemplateToAll(template.id, bulkOnlyUnconfigured, bulkEnable)
       .then((result) => {
-        addToast(
-          `Auf ${result.applied} Server angewendet${result.skipped.length > 0 ? `, ${result.skipped.length} übersprungen` : ''}.`,
-          result.skipped.length > 0 ? 'warning' : 'success',
-        );
         if (result.skipped.length > 0) {
-          console.warn('Backup Plus – übersprungene Server:', result.skipped);
+          addToast(
+            tExt('admin.bulk.resultSkipped', { applied: result.applied, skipped: result.skipped.length }),
+            'warning',
+          );
+          console.warn('Backup Plus – skipped servers:', result.skipped);
+        } else {
+          addToast(tExt('admin.bulk.result', { applied: result.applied }), 'success');
         }
-        getAdminOverview().then(setOverview).catch(() => {});
+        getAdminOverview()
+          .then(setOverview)
+          .catch(() => {});
       })
       .catch((err) => addToast(httpErrorToHuman(err), 'error'))
       .finally(() => setBulkRunning(false));
@@ -211,71 +220,76 @@ export default function AdminPage() {
 
   const templateOptions = templates.map((t) => ({
     value: t.id,
-    label: t.builtin ? t.name : `${t.name} (eigene)`,
+    label: t.builtin ? t.name : `${t.name} (${tExt('admin.templates.custom', {})})`,
   }));
 
   return (
     <Stack>
-      <TitleCard title='Übersicht' icon={faChartSimple}>
+      <TitleCard title={tExt('admin.overview.title', {})} icon={faChartSimple}>
         {overview ? (
           <SimpleGrid cols={{ base: 2, md: 6 }}>
-            <Stat label='Server eingerichtet' value={overview.policiesTotal} />
-            <Stat label='davon aktiv' value={overview.policiesEnabled} />
-            <Stat label='Routinen' value={overview.routinesTotal} />
-            <Stat label='mit Fehlern' value={overview.policiesWithErrors} />
-            <Stat label='verwaltete Backups' value={overview.managedBackups} />
-            <Stat label='Speicher' value={formatBytes(overview.managedBytes)} />
+            <Stat label={tExt('admin.overview.servers', {})} value={overview.policiesTotal} />
+            <Stat label={tExt('admin.overview.active', {})} value={overview.policiesEnabled} />
+            <Stat label={tExt('admin.overview.routines', {})} value={overview.routinesTotal} />
+            <Stat label={tExt('admin.overview.errors', {})} value={overview.policiesWithErrors} />
+            <Stat label={tExt('admin.overview.backups', {})} value={overview.managedBackups} />
+            <Stat label={tExt('admin.overview.storage', {})} value={formatBytes(overview.managedBytes)} />
           </SimpleGrid>
         ) : (
-          <Text c='dimmed'>Lädt…</Text>
+          <Text c='dimmed'>{tExt('admin.overview.loading', {})}</Text>
         )}
       </TitleCard>
 
-      <TitleCard title='Globale Einstellungen' icon={faGear}>
+      <TitleCard title={tExt('admin.settings.title', {})} icon={faGear}>
         <form onSubmit={form.onSubmit(doSaveSettings)}>
           <Stack>
             <Group>
               <Switch
-                label='Backup Plus aktiv'
-                description='Hauptschalter für alle Server.'
+                label={tExt('admin.settings.enabled', {})}
+                description={tExt('admin.settings.enabledDescription', {})}
                 {...form.getInputProps('enabled', { type: 'checkbox' })}
               />
               <Switch
-                label='Eigene Routinen erlauben'
-                description='Aus: Server-Nutzer können nur Vorlagen anwenden (Admins dürfen immer).'
+                label={tExt('admin.settings.allowCustom', {})}
+                description={tExt('admin.settings.allowCustomDescription', {})}
                 {...form.getInputProps('allowCustomRoutines', { type: 'checkbox' })}
               />
             </Group>
             <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
               <Select
-                label='Standard-Vorlage'
-                description='Wird Servern ohne Einrichtung vorgeschlagen.'
+                label={tExt('admin.settings.defaultTemplate', {})}
+                description={tExt('admin.settings.defaultTemplateDescription', {})}
                 data={templateOptions}
                 allowDeselect={false}
                 {...form.getInputProps('defaultTemplateId')}
               />
               <NumberInput
-                label='Kleinster Abstand neuer Backups (Stunden)'
+                label={tExt('admin.settings.minInterval', {})}
                 min={1}
                 max={168}
                 {...form.getInputProps('minIntervalHours')}
               />
               <NumberInput
-                label='Max. behaltene Backups pro Server'
+                label={tExt('admin.settings.maxKeep', {})}
                 min={1}
                 max={500}
                 {...form.getInputProps('maxKeepTotal')}
               />
-              <NumberInput label='Max. Routinen pro Server' min={1} max={50} {...form.getInputProps('maxRoutines')} />
               <NumberInput
-                label='Max. Server pro Minute'
-                description='Lastverteilung, wenn viele Server gleichzeitig fällig sind.'
+                label={tExt('admin.settings.maxRoutines', {})}
+                min={1}
+                max={50}
+                {...form.getInputProps('maxRoutines')}
+              />
+              <NumberInput
+                label={tExt('admin.settings.perTick', {})}
+                description={tExt('admin.settings.perTickDescription', {})}
                 min={1}
                 max={1000}
                 {...form.getInputProps('maxBackupsPerTick')}
               />
               <NumberInput
-                label='Protokolleinträge pro Server'
+                label={tExt('admin.settings.logRetention', {})}
                 min={10}
                 max={10000}
                 {...form.getInputProps('logRetention')}
@@ -283,18 +297,17 @@ export default function AdminPage() {
             </SimpleGrid>
             <AdminCan action='extensions.manage' cantSave>
               <Button type='submit' loading={saving} disabled={!form.isValid()} className='w-fit!'>
-                Einstellungen speichern
+                {tExt('admin.settings.save', {})}
               </Button>
             </AdminCan>
           </Stack>
         </form>
       </TitleCard>
 
-      <TitleCard title='Vorlagen' icon={faLayerGroup}>
+      <TitleCard title={tExt('admin.templates.title', {})} icon={faLayerGroup}>
         <Stack>
           <Text size='sm' c='dimmed'>
-            Eingebaute Vorlagen können nicht geändert, aber als Grundlage kopiert werden. Eigene Vorlagen stehen allen
-            Servern zur Auswahl.
+            {tExt('admin.templates.intro', {})}
           </Text>
 
           <Accordion variant='separated'>
@@ -306,7 +319,7 @@ export default function AdminPage() {
                     <Group gap='xs'>
                       <Text fw={500}>{t.name}</Text>
                       <Badge size='xs' variant='light'>
-                        eingebaut
+                        {tExt('admin.templates.builtin', {})}
                       </Badge>
                     </Group>
                   </Accordion.Control>
@@ -315,9 +328,16 @@ export default function AdminPage() {
                       <Text size='sm'>{t.description}</Text>
                       {t.routines.map((r) => (
                         <Text key={r.name} size='sm' c='dimmed'>
-                          • {r.name}: {r.source === 'create' ? 'erstellt' : `übernimmt aus „${r.sourceName}“`} ·{' '}
-                          <code>{r.cron}</code> · behält {r.keepCount}
-                          {r.maxAgeHours > 0 ? `, max. ${r.maxAgeHours} h` : ''}
+                          {tExt('admin.templates.routineLine', {
+                            name: r.name,
+                            kind:
+                              r.source === 'create'
+                                ? tExt('admin.templates.routineCreate', {})
+                                : tExt('admin.templates.routinePromote', { source: r.sourceName ?? '?' }),
+                            cron: r.cron,
+                            keep: r.keepCount,
+                          })}
+                          {r.maxAgeHours > 0 ? tExt('admin.templates.routineMaxAge', { hours: r.maxAgeHours }) : ''}
                         </Text>
                       ))}
                       <AdminCan action='extensions.manage'>
@@ -328,7 +348,7 @@ export default function AdminPage() {
                           leftSection={<FontAwesomeIcon icon={faCopy} />}
                           onClick={() => addDraft(t)}
                         >
-                          Als eigene Vorlage kopieren
+                          {tExt('admin.templates.copy', {})}
                         </Button>
                       </AdminCan>
                     </Stack>
@@ -340,9 +360,9 @@ export default function AdminPage() {
               <Accordion.Item key={index} value={`custom-${index}`}>
                 <Accordion.Control>
                   <Group gap='xs'>
-                    <Text fw={500}>{draft.name || '(ohne Namen)'}</Text>
+                    <Text fw={500}>{draft.name || tExt('common.unnamed', {})}</Text>
                     <Badge size='xs' color='grape' variant='light'>
-                      eigene
+                      {tExt('admin.templates.custom', {})}
                     </Badge>
                   </Group>
                 </Accordion.Control>
@@ -350,18 +370,18 @@ export default function AdminPage() {
                   <Stack>
                     <SimpleGrid cols={{ base: 1, sm: 3 }}>
                       <TextInput
-                        label='ID'
-                        description='Kleinbuchstaben, Ziffern, Bindestriche'
+                        label={tExt('admin.templates.id', {})}
+                        description={tExt('admin.templates.idDescription', {})}
                         value={draft.id}
                         onChange={(e) => updateDraft(index, { id: e.currentTarget.value })}
                       />
                       <TextInput
-                        label='Name'
+                        label={tExt('admin.templates.name', {})}
                         value={draft.name}
                         onChange={(e) => updateDraft(index, { name: e.currentTarget.value })}
                       />
                       <TextInput
-                        label='Beschreibung'
+                        label={tExt('admin.templates.description', {})}
                         value={draft.description}
                         onChange={(e) => updateDraft(index, { description: e.currentTarget.value })}
                       />
@@ -382,7 +402,7 @@ export default function AdminPage() {
                         setTemplatesDirty(true);
                       }}
                     >
-                      Vorlage löschen
+                      {tExt('admin.templates.delete', {})}
                     </Button>
                   </Stack>
                 </Accordion.Panel>
@@ -393,39 +413,39 @@ export default function AdminPage() {
           <AdminCan action='extensions.manage' cantSave>
             <Group>
               <Button variant='light' leftSection={<FontAwesomeIcon icon={faPlus} />} onClick={() => addDraft()}>
-                Neue Vorlage
+                {tExt('admin.templates.add', {})}
               </Button>
               <Button loading={saving} disabled={!templatesDirty} onClick={doSaveTemplates}>
-                Vorlagen speichern
+                {tExt('admin.templates.save', {})}
               </Button>
             </Group>
           </AdminCan>
         </Stack>
       </TitleCard>
 
-      <TitleCard title='Vorlage auf Server anwenden' icon={faServer}>
+      <TitleCard title={tExt('admin.bulk.title', {})} icon={faServer}>
         <Stack>
           <Select
-            label='Vorlage'
-            placeholder='Vorlage wählen'
+            label={tExt('admin.bulk.template', {})}
+            placeholder={tExt('admin.bulk.placeholder', {})}
             data={templateOptions}
             value={bulkTemplate}
             onChange={setBulkTemplate}
           />
           <Group>
             <Switch
-              label='Nur Server ohne eigene Routinen'
+              label={tExt('admin.bulk.onlyUnconfigured', {})}
               checked={bulkOnlyUnconfigured}
               onChange={(e) => setBulkOnlyUnconfigured(e.currentTarget.checked)}
             />
             <Switch
-              label='Automatische Backups gleich aktivieren'
+              label={tExt('admin.bulk.enable', {})}
               checked={bulkEnable}
               onChange={(e) => setBulkEnable(e.currentTarget.checked)}
             />
           </Group>
           <Text size='sm' c='dimmed'>
-            Server, deren Backup-Limit für die Vorlage nicht reicht, werden übersprungen.
+            {tExt('admin.bulk.hint', {})}
           </Text>
           <AdminCan action='extensions.manage'>
             <Button
@@ -434,7 +454,7 @@ export default function AdminPage() {
               disabled={!bulkTemplate || templatesDirty}
               onClick={doBulkApply}
             >
-              Anwenden
+              {tExt('admin.bulk.apply', {})}
             </Button>
           </AdminCan>
         </Stack>

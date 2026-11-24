@@ -1,0 +1,225 @@
+{
+  "items": {
+    "backup": {
+      "zero": "{count} Backups",
+      "one": "{count} Backup",
+      "two": "{count} Backups",
+      "few": "{count} Backups",
+      "many": "{count} Backups",
+      "other": "{count} Backups"
+    },
+    "routine": {
+      "zero": "{count} Routinen",
+      "one": "{count} Routine",
+      "two": "{count} Routinen",
+      "few": "{count} Routinen",
+      "many": "{count} Routinen",
+      "other": "{count} Routinen"
+    }
+  },
+  "translations": {
+    "common": {
+      "unnamed": "(ohne Namen)",
+      "soon": "gleich",
+      "paused": "pausiert",
+      "none": "keine",
+      "notAvailable": "–"
+    },
+    "cron": {
+      "hourly": "Stündlich (zur vollen Stunde)",
+      "every2h": "Alle 2 Stunden",
+      "every6h": "Alle 6 Stunden",
+      "every12h": "Alle 12 Stunden",
+      "daily0": "Täglich um 00:00",
+      "daily4": "Täglich um 04:00",
+      "weeklyMonday": "Wöchentlich, Montag 00:00",
+      "weeklySunday": "Wöchentlich, Sonntag 03:00",
+      "monthly": "Monatlich, am 1. um 00:00"
+    },
+    "reason": {
+      "failed": "Backup ist fehlgeschlagen",
+      "tooOld": "älter als das Höchstalter der Routine \"{routine}\"",
+      "overKeep": "älter als die {keep} neuesten Backups der Routine \"{routine}\""
+    },
+    "server": {
+      "title": "Auto-Backups",
+      "button": {
+        "runNow": "Jetzt sichern",
+        "runRoutine": "Jetzt ausführen",
+        "applyTemplate": "Vorlage anwenden",
+        "save": "Speichern",
+        "discard": "Änderungen verwerfen"
+      },
+      "alert": {
+        "globallyDisabledTitle": "Global deaktiviert",
+        "globallyDisabled": "Ein Administrator hat Backup Plus pausiert. Es werden derzeit keine automatischen Backups erstellt oder gelöscht.",
+        "lastRunFailed": "Letzter Lauf fehlgeschlagen",
+        "routineError": "Routine „{name}“",
+        "limitTooLow": "Das Backup-Limit dieses Servers ({limit}) ist kleiner als die Summe der behaltenen Backups ({total}). Bitte einen Administrator, das Limit zu erhöhen (empfohlen: {recommended}).",
+        "customDisabled": "Eigene Routinen sind vom Administrator deaktiviert – du kannst eine der Vorlagen anwenden."
+      },
+      "card": {
+        "status": "Status",
+        "active": "Aktiv",
+        "paused": "Pausiert",
+        "lastRun": "Letzter Lauf: {time}",
+        "timezone": "Zeitzone: {timezone}",
+        "managed": "Verwaltete Backups",
+        "used": "{size} belegt",
+        "limit": "Backup-Limit",
+        "limitHint": "alle Backups dieses Servers",
+        "routines": "Routinen",
+        "routineLine": "{name} · nächster: {next}"
+      },
+      "setup": {
+        "title": "Einrichtung",
+        "template": "Vorlage",
+        "customTemplate": "{name} (eigene)",
+        "enabled": "Automatische Backups aktiv",
+        "deleteFailed": "Fehlgeschlagene Backups automatisch löschen",
+        "confirmTemplate": "Vorlage „{name}“ anwenden? Die bisherigen Routinen werden ersetzt. Vorhandene Backups bleiben erhalten, werden aber keiner Routine mehr zugeordnet."
+      },
+      "routines": {
+        "title": "Routinen",
+        "intro": "Jede Routine behält ihre neuesten Backups. Eine Routine vom Typ „übernehmen“ erstellt keine eigenen Backups: Fällt ein Backup aus ihrer Quelle heraus und sie ist laut Zeitplan dran, wird es übernommen statt gelöscht – so entstehen z. B. wöchentliche und monatliche Backups ohne Zusatzaufwand.",
+        "status": "Backups: {count}/{keep} · letzter Lauf: {last} · nächster: {next}"
+      },
+      "backups": {
+        "title": "Verwaltete Backups",
+        "empty": "Noch keine automatischen Backups vorhanden.",
+        "name": "Name",
+        "routine": "Routine",
+        "created": "Erstellt",
+        "size": "Größe",
+        "nextAction": "Nächste Aktion",
+        "actions": "Aktionen",
+        "pin": "Anpinnen (nie löschen)",
+        "unpin": "Loslösen",
+        "assign": "Routine zuordnen",
+        "assignNone": "Keine (aus Rotation nehmen)"
+      },
+      "planned": {
+        "keep": "Bleibt",
+        "move": "Wird „{routine}“",
+        "delete": "Wird gelöscht",
+        "pinned": "Angepinnt",
+        "running": "Läuft",
+        "failedKept": "Fehlgeschlagen",
+        "unassigned": "Nicht verwaltet",
+        "unassignedTooltip": "Gehört zu keiner aktiven Routine und wird nicht automatisch gelöscht."
+      },
+      "log": {
+        "title": "Protokoll",
+        "empty": "Noch keine Einträge."
+      },
+      "toast": {
+        "saved": "Gespeichert. Automatische Backups sind aktiv.",
+        "savedPaused": "Gespeichert (pausiert).",
+        "templateApplied": "Vorlage „{name}“ angewendet und aktiviert.",
+        "backupStarted": "Backup gestartet.",
+        "pinned": "Backup angepinnt – es wird nie automatisch gelöscht.",
+        "unpinned": "Backup losgelöst.",
+        "assigned": "Backup „{routine}“ zugeordnet.",
+        "unassigned": "Backup aus der Rotation genommen."
+      }
+    },
+    "editor": {
+      "empty": "Noch keine Routine angelegt. Wende oben eine Vorlage an oder füge eine Routine hinzu.",
+      "moveUp": "Nach oben",
+      "moveDown": "Nach unten",
+      "remove": "Routine entfernen (ihre Backups bleiben erhalten)",
+      "name": "Name",
+      "type": "Art",
+      "typeCreate": "Neues Backup erstellen",
+      "typePromote": "Backup aus anderer Routine übernehmen",
+      "source": "Quelle",
+      "sourceDescription": "Fällt ein Backup aus dieser Routine heraus und diese Routine ist laut Zeitplan dran, wird es übernommen statt gelöscht.",
+      "sourcePlaceholder": "Routine wählen",
+      "scheduleCreate": "Zeitplan (wann gesichert wird)",
+      "schedulePromote": "Zeitplan (wann übernommen wird)",
+      "scheduleDescription": "Cron mit Sekunden, Zeitzone {timezone}",
+      "presets": "Schnellauswahl",
+      "presetsPlaceholder": "Vorgabe wählen …",
+      "keep": "Behalten",
+      "keepDescription": "Anzahl der neuesten Backups",
+      "maxAge": "Höchstalter (Stunden)",
+      "maxAgeDescription": "0 = unbegrenzt",
+      "enabled": "Aktiv",
+      "nameTemplate": "Namensvorlage",
+      "ignoredFiles": "Ignorierte Dateien",
+      "ignoredFilesDescription": "Eine Regel pro Zeile, z. B. logs/ oder *.tmp",
+      "add": "Routine hinzufügen",
+      "total": "Insgesamt {backups}",
+      "defaultName": "Routine {number}",
+      "defaultFirst": "Stündlich",
+      "defaultSecond": "Wöchentlich"
+    },
+    "admin": {
+      "overview": {
+        "title": "Übersicht",
+        "loading": "Lädt…",
+        "servers": "Server eingerichtet",
+        "active": "davon aktiv",
+        "routines": "Routinen",
+        "errors": "mit Fehlern",
+        "backups": "verwaltete Backups",
+        "storage": "Speicher"
+      },
+      "settings": {
+        "title": "Globale Einstellungen",
+        "enabled": "Backup Plus aktiv",
+        "enabledDescription": "Hauptschalter für alle Server.",
+        "allowCustom": "Eigene Routinen erlauben",
+        "allowCustomDescription": "Aus: Server-Nutzer können nur Vorlagen anwenden (Admins dürfen immer).",
+        "defaultTemplate": "Standard-Vorlage",
+        "defaultTemplateDescription": "Wird Servern ohne Einrichtung vorgeschlagen.",
+        "minInterval": "Kleinster Abstand neuer Backups (Stunden)",
+        "maxKeep": "Max. behaltene Backups pro Server",
+        "maxRoutines": "Max. Routinen pro Server",
+        "perTick": "Max. Server pro Minute",
+        "perTickDescription": "Lastverteilung, wenn viele Server gleichzeitig fällig sind.",
+        "logRetention": "Protokolleinträge pro Server",
+        "save": "Einstellungen speichern",
+        "saved": "Einstellungen gespeichert."
+      },
+      "templates": {
+        "title": "Vorlagen",
+        "intro": "Eingebaute Vorlagen können nicht geändert, aber als Grundlage kopiert werden. Eigene Vorlagen stehen allen Servern zur Auswahl.",
+        "builtin": "eingebaut",
+        "custom": "eigene",
+        "routineCreate": "erstellt",
+        "routinePromote": "übernimmt aus „{source}“",
+        "routineLine": "• {name}: {kind} · {cron} · behält {keep}",
+        "routineMaxAge": ", max. {hours} h",
+        "copy": "Als eigene Vorlage kopieren",
+        "copySuffix": "{name} (Kopie)",
+        "id": "ID",
+        "idDescription": "Kleinbuchstaben, Ziffern, Bindestriche",
+        "name": "Name",
+        "description": "Beschreibung",
+        "delete": "Vorlage löschen",
+        "add": "Neue Vorlage",
+        "save": "Vorlagen speichern",
+        "saved": "Vorlagen gespeichert.",
+        "defaultName": "Eigene Vorlage {number}"
+      },
+      "bulk": {
+        "title": "Vorlage auf Server anwenden",
+        "template": "Vorlage",
+        "placeholder": "Vorlage wählen",
+        "onlyUnconfigured": "Nur Server ohne eigene Routinen",
+        "enable": "Automatische Backups gleich aktivieren",
+        "hint": "Server, deren Backup-Limit für die Vorlage nicht reicht, werden übersprungen.",
+        "apply": "Anwenden",
+        "confirmUnconfigured": "Vorlage „{name}“ auf alle noch nicht eingerichteten Server anwenden?",
+        "confirmAll": "Vorlage „{name}“ auf ALLE Server anwenden? Bestehende Routinen werden ersetzt.",
+        "result": "Auf {applied} Server angewendet.",
+        "resultSkipped": "Auf {applied} Server angewendet, {skipped} übersprungen."
+      }
+    },
+    "card": {
+      "summary": "{servers} aktive Server · {routines} Routinen · {backups} Backups",
+      "errors": " · {count} mit Fehlern"
+    }
+  }
+}

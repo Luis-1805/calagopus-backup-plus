@@ -2,8 +2,10 @@ import { Text } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { getAdminOverview } from './api.ts';
 import type { AdminOverview } from './lib/schemas.ts';
+import { useExtTranslations } from './translations.ts';
 
 export default function CardSummary() {
+  const { t: tExt } = useExtTranslations();
   const [overview, setOverview] = useState<AdminOverview | null>(null);
 
   useEffect(() => {
@@ -16,8 +18,12 @@ export default function CardSummary() {
 
   return (
     <Text size='sm' c='dimmed'>
-      {overview.policiesEnabled} aktive Server · {overview.routinesTotal} Routinen · {overview.managedBackups} Backups
-      {overview.policiesWithErrors > 0 ? ` · ${overview.policiesWithErrors} mit Fehlern` : ''}
+      {tExt('card.summary', {
+        servers: overview.policiesEnabled,
+        routines: overview.routinesTotal,
+        backups: overview.managedBackups,
+      })}
+      {overview.policiesWithErrors > 0 ? tExt('card.errors', { count: overview.policiesWithErrors }) : ''}
     </Text>
   );
 }

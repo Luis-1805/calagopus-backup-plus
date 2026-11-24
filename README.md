@@ -105,7 +105,9 @@ routines (hourly → daily → weekly → monthly).
 </table>
 
 > [!NOTE]
-> The extension's interface inside the panel is currently in **German**.
+> 🌍 Available in **English** and **German**. The interface, error messages, the run log and the built-in template
+> names follow each user's panel language. More languages can be added by dropping a JSON file into
+> `frontend/public/translations/<language>/` (see [Translations](#translations)).
 
 ## Built-in templates
 
@@ -170,6 +172,16 @@ frontend/      React UI (server tab, admin page)
 migrations/    SQL migrations
 Metadata.toml  Extension metadata
 ```
+
+## Translations
+
+| Part | Where | Notes |
+| --- | --- | --- |
+| Interface | `frontend/src/translations.ts` (English base) + `frontend/public/translations/<lang>/dev.backupplus.gfsbackups.json` | Uses the panel's translation system |
+| Errors, run log, built-in templates | `backend/src/i18n.rs` | Rendered in the requesting user's language; the log stores message keys, so every user reads it in their own language |
+
+To add a language, copy the German JSON file, translate the values and add the matching entries in `i18n.rs`.
+Pull requests are very welcome.
 
 ## Contributing
 

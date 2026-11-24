@@ -10,6 +10,7 @@ use shared::{
 use std::{str::FromStr, sync::Arc};
 
 mod engine;
+mod i18n;
 mod models;
 mod retention;
 mod schedule;
@@ -28,7 +29,7 @@ pub struct ExtensionStruct;
 #[async_trait::async_trait]
 impl Extension for ExtensionStruct {
     async fn initialize(&mut self, _state: State) {
-        tracing::info!("backup-plus: Extension geladen");
+        tracing::info!("backup-plus: extension loaded");
     }
 
     async fn initialize_router(
@@ -57,7 +58,7 @@ impl Extension for ExtensionStruct {
         builder
             .add_cron_task(
                 "backup_plus_tick",
-                croner::Cron::from_str("0 * * * * *").expect("gültiger Cron-Ausdruck"),
+                croner::Cron::from_str("0 * * * * *").expect("valid cron expression"),
                 |state| async move { engine::tick(state).await },
             )
             .await;
@@ -73,7 +74,7 @@ impl Extension for ExtensionStruct {
         builder.add_server_permission_group(
             "backup-plus",
             PermissionGroup {
-                description: "Berechtigungen für automatische Backups (Backup Plus).",
+                description: "Permissions for automatic backups (Backup Plus).",
                 permissions: IndexMap::from([
                     (
                         "read",

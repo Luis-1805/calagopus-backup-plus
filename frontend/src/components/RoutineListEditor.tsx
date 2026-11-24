@@ -9,6 +9,7 @@ import Switch from '@/elements/input/Switch.tsx';
 import TextArea from '@/elements/input/TextArea.tsx';
 import TextInput from '@/elements/input/TextInput.tsx';
 import { cronPresets, newKey, type RoutineInput, routineColors } from '../lib/schemas.ts';
+import { getExtTranslations, useExtTranslations } from '../translations.ts';
 
 interface Props {
   routines: RoutineInput[];
@@ -16,15 +17,17 @@ interface Props {
   timezone: string;
   maxRoutines: number;
   readOnly?: boolean;
-  /** Zusätzliche Inhalte pro Routine (Status, "Jetzt ausführen" …). */
+  /** Extra content per routine (status, "run now" …). */
   renderExtra?: (routine: RoutineInput) => ReactNode;
 }
 
 export function emptyRoutine(position: number): RoutineInput {
+  const { t } = getExtTranslations();
+
   return {
     key: newKey(),
     uuid: null,
-    name: position === 0 ? 'Stündlich' : `Routine ${position + 1}`,
+    name: position === 0 ? t('editor.defaultFirst', {}) : t('editor.defaultName', { number: position + 1 }),
     enabled: true,
     cron: '0 0 * * * *',
     source: 'create',
@@ -41,6 +44,8 @@ export function routineColor(index: number): string {
 }
 
 export default function RoutineListEditor({ routines, onChange, timezone, maxRoutines, readOnly, renderExtra }: Props) {
+  const { t: tExt, tItem: tExtItem } = useExtTranslations();
+
   const update = (index: number, patch: Partial<RoutineInput>) => {
     onChange(routines.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   };
@@ -66,31 +71,34 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
     const routine = emptyRoutine(routines.length);
     const firstCreate = routines.find((r) => r.source === 'create');
     if (firstCreate) {
-      // Eine weitere Routine soll typischerweise Backups übernehmen (z. B. "Wöchentlich").
+      // A second routine usually takes backups over (e.g. "Weekly").
       routine.source = 'promote';
       routine.sourceKey = firstCreate.key;
       routine.cron = '0 0 0 * * 1';
       routine.keepCount = 1;
-      routine.name = 'Wöchentlich';
-      if (routines.some((r) => r.name === routine.name)) routine.name = `Routine ${routines.length + 1}`;
+      routine.name = tExt('editor.defaultSecond', {});
+      if (routines.some((r) => r.name === routine.name)) {
+        routine.name = tExt('editor.defaultName', { number: routines.length + 1 });
+      }
     }
     onChange([...routines, routine]);
   };
 
   const keepTotal = routines.reduce((sum, r) => sum + (Number(r.keepCount) || 0), 0);
+  const presetOptions = cronPresets.map((p) => ({ value: p.value, label: tExt(`cron.${p.key}`, {}) }));
 
   return (
     <Stack>
       {routines.length === 0 && (
         <Text c='dimmed' size='sm'>
-          Noch keine Routine angelegt. Wende oben eine Vorlage an oder füge eine Routine hinzu.
+          {tExt('editor.empty', {})}
         </Text>
       )}
 
       {routines.map((routine, index) => {
         const sourceOptions = routines
           .filter((r) => r.key !== routine.key)
-          .map((r) => ({ value: r.key, label: r.name || '(ohne Namen)' }));
+          .map((r) => ({ value: r.key, label: r.name || tExt('common.unnamed', {}) }));
 
         return (
           <Card key={routine.key} withBorder radius='md' p='md'>
@@ -100,21 +108,21 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
                   <Badge color={routineColor(index)} variant='light'>
                     {index + 1}
                   </Badge>
-                  <Text fw={600}>{routine.name || '(ohne Namen)'}</Text>
+                  <Text fw={600}>{routine.name || tExt('common.unnamed', {})}</Text>
                   {!routine.enabled && (
                     <Badge color='gray' variant='outline'>
-                      pausiert
+                      {tExt('common.paused', {})}
                     </Badge>
                   )}
                 </Group>
                 {!readOnly && (
                   <Group gap={4} wrap='nowrap'>
-                    <Tooltip label='Nach oben'>
+                    <Tooltip label={tExt('editor.moveUp', {})}>
                       <ActionIcon variant='subtle' disabled={index === 0} onClick={() => move(index, -1)}>
                         <FontAwesomeIcon icon={faArrowUp} />
                       </ActionIcon>
                     </Tooltip>
-                    <Tooltip label='Nach unten'>
+                    <Tooltip label={tExt('editor.moveDown', {})}>
                       <ActionIcon
                         variant='subtle'
                         disabled={index === routines.length - 1}
@@ -123,7 +131,7 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
                         <FontAwesomeIcon icon={faArrowDown} />
                       </ActionIcon>
                     </Tooltip>
-                    <Tooltip label='Routine entfernen (ihre Backups bleiben erhalten)'>
+                    <Tooltip label={tExt('editor.remove', {})}>
                       <ActionIcon variant='subtle' color='red' onClick={() => remove(index)}>
                         <FontAwesomeIcon icon={faTrash} />
                       </ActionIcon>
@@ -136,20 +144,20 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
 
               <SimpleGrid cols={{ base: 1, sm: 2 }}>
                 <TextInput
-                  label='Name'
+                  label={tExt('editor.name', {})}
                   value={routine.name}
                   disabled={readOnly}
                   maxLength={64}
                   onChange={(e) => update(index, { name: e.currentTarget.value })}
                 />
                 <Select
-                  label='Art'
+                  label={tExt('editor.type', {})}
                   disabled={readOnly}
                   allowDeselect={false}
                   value={routine.source}
                   data={[
-                    { value: 'create', label: 'Neues Backup erstellen' },
-                    { value: 'promote', label: 'Backup aus anderer Routine übernehmen' },
+                    { value: 'create', label: tExt('editor.typeCreate', {}) },
+                    { value: 'promote', label: tExt('editor.typePromote', {}) },
                   ]}
                   onChange={(value) =>
                     update(index, {
@@ -162,40 +170,40 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
 
               {routine.source === 'promote' && (
                 <Select
-                  label='Quelle'
-                  description='Fällt ein Backup aus dieser Routine heraus und diese Routine ist laut Zeitplan dran, wird es übernommen statt gelöscht.'
+                  label={tExt('editor.source', {})}
+                  description={tExt('editor.sourceDescription', {})}
                   disabled={readOnly}
                   value={routine.sourceKey}
                   data={sourceOptions}
-                  placeholder='Routine wählen'
+                  placeholder={tExt('editor.sourcePlaceholder', {})}
                   onChange={(value) => update(index, { sourceKey: value })}
                 />
               )}
 
               <SimpleGrid cols={{ base: 1, sm: 2 }}>
-                <Stack gap={4}>
-                  <CronInput
-                    label={routine.source === 'create' ? 'Zeitplan (wann gesichert wird)' : 'Zeitplan (wann übernommen wird)'}
-                    description={`Cron mit Sekunden, Zeitzone ${timezone}`}
-                    value={routine.cron}
-                    timezone={timezone}
-                    onChange={(value) => !readOnly && update(index, { cron: value })}
-                  />
-                </Stack>
+                <CronInput
+                  label={
+                    routine.source === 'create' ? tExt('editor.scheduleCreate', {}) : tExt('editor.schedulePromote', {})
+                  }
+                  description={tExt('editor.scheduleDescription', { timezone })}
+                  value={routine.cron}
+                  timezone={timezone}
+                  onChange={(value) => !readOnly && update(index, { cron: value })}
+                />
                 <Select
-                  label='Schnellauswahl'
-                  placeholder='Vorgabe wählen …'
+                  label={tExt('editor.presets', {})}
+                  placeholder={tExt('editor.presetsPlaceholder', {})}
                   disabled={readOnly}
-                  value={cronPresets.some((p) => p.value === routine.cron) ? routine.cron : null}
-                  data={cronPresets}
+                  value={presetOptions.some((p) => p.value === routine.cron) ? routine.cron : null}
+                  data={presetOptions}
                   onChange={(value) => value && update(index, { cron: value })}
                 />
               </SimpleGrid>
 
               <SimpleGrid cols={{ base: 1, sm: 3 }}>
                 <NumberInput
-                  label='Behalten'
-                  description='Anzahl der neuesten Backups'
+                  label={tExt('editor.keep', {})}
+                  description={tExt('editor.keepDescription', {})}
                   min={1}
                   max={500}
                   disabled={readOnly}
@@ -203,8 +211,8 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
                   onChange={(value) => update(index, { keepCount: Number(value) || 1 })}
                 />
                 <NumberInput
-                  label='Höchstalter (Stunden)'
-                  description='0 = unbegrenzt'
+                  label={tExt('editor.maxAge', {})}
+                  description={tExt('editor.maxAgeDescription', {})}
                   min={0}
                   max={87600}
                   disabled={readOnly}
@@ -212,7 +220,7 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
                   onChange={(value) => update(index, { maxAgeHours: Number(value) || 0 })}
                 />
                 <Switch
-                  label='Aktiv'
+                  label={tExt('editor.enabled', {})}
                   mt='lg'
                   disabled={readOnly}
                   checked={routine.enabled}
@@ -223,7 +231,7 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
               {routine.source === 'create' && (
                 <SimpleGrid cols={{ base: 1, sm: 2 }}>
                   <TextInput
-                    label='Namensvorlage'
+                    label={tExt('editor.nameTemplate', {})}
                     description='{routine}, {date}, {day}, {time}, {server}'
                     disabled={readOnly}
                     value={routine.nameTemplate}
@@ -231,8 +239,8 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
                     onChange={(e) => update(index, { nameTemplate: e.currentTarget.value })}
                   />
                   <TextArea
-                    label='Ignorierte Dateien'
-                    description='Eine Regel pro Zeile, z. B. logs/ oder *.tmp'
+                    label={tExt('editor.ignoredFiles', {})}
+                    description={tExt('editor.ignoredFilesDescription', {})}
                     autosize
                     minRows={1}
                     disabled={readOnly}
@@ -254,10 +262,10 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
             disabled={routines.length >= maxRoutines}
             onClick={add}
           >
-            Routine hinzufügen
+            {tExt('editor.add', {})}
           </Button>
           <Text size='sm' c='dimmed'>
-            Insgesamt {keepTotal} Backups
+            {tExt('editor.total', { backups: tExtItem('backup', keepTotal) })}
           </Text>
         </Group>
       )}
@@ -265,7 +273,7 @@ export default function RoutineListEditor({ routines, onChange, timezone, maxRou
   );
 }
 
-/** Ignorierte Dateien vor dem Speichern säubern. */
+/** Clean up routines before saving. */
 export function cleanRoutines(routines: RoutineInput[]): RoutineInput[] {
   return routines.map((r) => ({
     ...r,

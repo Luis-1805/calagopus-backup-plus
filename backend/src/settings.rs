@@ -138,23 +138,23 @@ pub async fn load(state: &shared::State) -> ExtensionSettingsData {
         Ok(settings) => match settings.find_extension_settings::<ExtensionSettingsData>() {
             Ok(data) => data.clone(),
             Err(err) => {
-                tracing::warn!("backup-plus: Einstellungen nicht gefunden: {err:#?}");
+                tracing::warn!("backup-plus: settings not found: {err:#?}");
                 ExtensionSettingsData::default()
             }
         },
         Err(err) => {
-            tracing::warn!("backup-plus: Einstellungen konnten nicht geladen werden: {err:#?}");
+            tracing::warn!("backup-plus: failed to load settings: {err:#?}");
             ExtensionSettingsData::default()
         }
     }
 }
 
 impl ExtensionSettingsData {
-    pub fn all_templates(&self) -> Vec<Template> {
-        crate::templates::all(&self.templates)
+    pub fn all_templates(&self, lang: crate::i18n::Lang) -> Vec<Template> {
+        crate::templates::all(&self.templates, lang)
     }
 
-    pub fn find_template(&self, id: &str) -> Option<Template> {
-        self.all_templates().into_iter().find(|t| t.id == id)
+    pub fn find_template(&self, id: &str, lang: crate::i18n::Lang) -> Option<Template> {
+        self.all_templates(lang).into_iter().find(|t| t.id == id)
     }
 }

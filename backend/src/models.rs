@@ -258,7 +258,7 @@ impl Routine {
     ) -> Result<(), sqlx::Error> {
         if routines.iter().any(|r| r.server_uuid != server_uuid) {
             return Err(sqlx::Error::Protocol(
-                "Routine gehört zu einem anderen Server".into(),
+                "routine belongs to another server".into(),
             ));
         }
 
@@ -450,19 +450,19 @@ pub async fn write_log(
     database: &Database,
     server_uuid: uuid::Uuid,
     level: &str,
-    message: impl AsRef<str>,
+    message: crate::i18n::Msg,
 ) {
     let result = sqlx::query(
         "INSERT INTO backup_plus_log (server_uuid, level, message) VALUES ($1, $2, $3)",
     )
     .bind(server_uuid)
     .bind(level)
-    .bind(message.as_ref())
+    .bind(message.to_json())
     .execute(database.write())
     .await;
 
     if let Err(err) = result {
-        tracing::warn!(server = %server_uuid, "backup-plus: Log-Eintrag fehlgeschlagen: {err:#?}");
+        tracing::warn!(server = %server_uuid, "backup-plus: failed to write log entry: {err:#?}");
     }
 }
 
@@ -470,6 +470,7 @@ pub async fn read_log(
     database: &Database,
     server_uuid: uuid::Uuid,
     limit: i64,
+    lang: crate::i18n::Lang,
 ) -> Result<Vec<LogEntry>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
@@ -490,7 +491,8 @@ pub async fn read_log(
             let created: chrono::NaiveDateTime = row.try_get("created")?;
             Ok(LogEntry {
                 level: row.try_get("level")?,
-                message: row.try_get("message")?,
+                message: crate::i18n::Msg::from_stored(&row.try_get::<String, _>("message")?)
+                    .render(lang),
                 created: created.and_utc(),
             })
         })

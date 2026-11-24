@@ -5,7 +5,7 @@ use std::str::FromStr;
 /// Parst einen Cron-Ausdruck mit 5 oder 6 Feldern.
 pub fn parse(expression: &str) -> Result<croner::Cron, String> {
     croner::Cron::from_str(expression.trim())
-        .map_err(|err| format!("Ungültiger Zeitplan \"{expression}\": {err}"))
+        .map_err(|err| err.to_string())
 }
 
 /// Zeitzone eines Servers (fällt wie das Panel auf UTC zurück).

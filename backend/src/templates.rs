@@ -1,6 +1,9 @@
 //! Vorlagen für Backup-Routinen: eingebaute und vom Admin angelegte.
 
-use crate::models::{Routine, RoutineSource};
+use crate::{
+    i18n::{Lang, Msg, t},
+    models::{Routine, RoutineSource},
+};
 use garde::Validate;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -67,7 +70,7 @@ fn valid_id(value: &str, _context: &()) -> garde::Result {
         Ok(())
     } else {
         Err(garde::Error::new(
-            "nur Kleinbuchstaben, Ziffern und Bindestriche erlaubt",
+            "only lowercase letters, digits and hyphens are allowed",
         ))
     }
 }
@@ -104,54 +107,61 @@ fn routine(
     }
 }
 
+/// Die ID ist intern und bleibt aus Kompatibilitätsgründen unverändert.
 pub const DEFAULT_TEMPLATE_ID: &str = "gfs-kompakt";
 
-/// Eingebaute Vorlagen.
-pub fn builtin() -> Vec<Template> {
+/// Eingebaute Vorlagen, Namen in der Sprache des Nutzers.
+pub fn builtin(lang: Lang) -> Vec<Template> {
+    let hourly = t("routine.hourly", lang);
+    let daily = t("routine.daily", lang);
+    let weekly = t("routine.weekly", lang);
+    let monthly = t("routine.monthly", lang);
+    let every_6h = t("routine.every_6h", lang);
+
     vec![
         Template {
             id: DEFAULT_TEMPLATE_ID.into(),
-            name: "GFS kompakt (5 Backups)".into(),
-            description: "Die letzten 3 Stunden, dazu ein wöchentliches (jeden Montag erneuert) und ein monatliches (jeden 1. erneuert) Backup. Ältere werden gelöscht.".into(),
+            name: t("tpl.gfs_compact.name", lang),
+            description: t("tpl.gfs_compact.description", lang),
             builtin: true,
             routines: vec![
-                routine("Stündlich", "0 0 * * * *", None, 3, 0),
-                routine("Wöchentlich", "0 0 0 * * 1", Some("Stündlich"), 1, 0),
-                routine("Monatlich", "0 0 0 1 * *", Some("Stündlich"), 1, 0),
+                routine(&hourly, "0 0 * * * *", None, 3, 0),
+                routine(&weekly, "0 0 0 * * 1", Some(&hourly), 1, 0),
+                routine(&monthly, "0 0 0 1 * *", Some(&hourly), 1, 0),
             ],
         },
         Template {
             id: "gfs-erweitert".into(),
-            name: "GFS erweitert (41 Backups)".into(),
-            description: "24 stündliche, 7 tägliche, 4 wöchentliche und 6 monatliche Backups.".into(),
+            name: t("tpl.gfs_extended.name", lang),
+            description: t("tpl.gfs_extended.description", lang),
             builtin: true,
             routines: vec![
-                routine("Stündlich", "0 0 * * * *", None, 24, 0),
-                routine("Täglich", "0 0 0 * * *", Some("Stündlich"), 7, 0),
-                routine("Wöchentlich", "0 0 0 * * 1", Some("Täglich"), 4, 0),
-                routine("Monatlich", "0 0 0 1 * *", Some("Wöchentlich"), 6, 0),
+                routine(&hourly, "0 0 * * * *", None, 24, 0),
+                routine(&daily, "0 0 0 * * *", Some(&hourly), 7, 0),
+                routine(&weekly, "0 0 0 * * 1", Some(&daily), 4, 0),
+                routine(&monthly, "0 0 0 1 * *", Some(&weekly), 6, 0),
             ],
         },
         Template {
             id: "taeglich-7".into(),
-            name: "Täglich, 7 Tage".into(),
-            description: "Jede Nacht um 04:00 ein Backup, die letzten 7 werden behalten.".into(),
+            name: t("tpl.daily_7.name", lang),
+            description: t("tpl.daily_7.description", lang),
             builtin: true,
-            routines: vec![routine("Täglich", "0 0 4 * * *", None, 7, 0)],
+            routines: vec![routine(&daily, "0 0 4 * * *", None, 7, 0)],
         },
         Template {
             id: "alle-6-stunden".into(),
-            name: "Alle 6 Stunden, 2 Tage".into(),
-            description: "Alle 6 Stunden ein Backup, maximal 2 Tage alt.".into(),
+            name: t("tpl.every_6h.name", lang),
+            description: t("tpl.every_6h.description", lang),
             builtin: true,
-            routines: vec![routine("Alle 6 Stunden", "0 0 */6 * * *", None, 8, 48)],
+            routines: vec![routine(&every_6h, "0 0 */6 * * *", None, 8, 48)],
         },
     ]
 }
 
 /// Eingebaute und eigene Vorlagen zusammen.
-pub fn all(custom: &[Template]) -> Vec<Template> {
-    let mut templates = builtin();
+pub fn all(custom: &[Template], lang: Lang) -> Vec<Template> {
+    let mut templates = builtin(lang);
     templates.extend(custom.iter().cloned().map(|mut t| {
         t.builtin = false;
         t
@@ -160,7 +170,7 @@ pub fn all(custom: &[Template]) -> Vec<Template> {
 }
 
 /// Baut aus einer Vorlage die Routinen für einen Server (Quellen per Name aufgelöst).
-pub fn to_routines(template: &Template, server_uuid: uuid::Uuid) -> Result<Vec<Routine>, String> {
+pub fn to_routines(template: &Template, server_uuid: uuid::Uuid) -> Result<Vec<Routine>, Msg> {
     let uuids: Vec<uuid::Uuid> = template.routines.iter().map(|_| uuid::Uuid::new_v4()).collect();
 
     template
@@ -176,11 +186,13 @@ pub fn to_routines(template: &Template, server_uuid: uuid::Uuid) -> Result<Vec<R
                         .position(|other| &other.name == source)
                         .map(|i| uuids[i])
                         .ok_or_else(|| {
-                            format!("Routine \"{}\": Quell-Routine \"{source}\" fehlt in der Vorlage", r.name)
+                            Msg::new("val.template_source_unknown")
+                                .arg("routine", &r.name)
+                                .arg("source", source)
                         })?,
                 ),
                 (RoutineSource::Promote, None) => {
-                    return Err(format!("Routine \"{}\": Quell-Routine fehlt", r.name));
+                    return Err(Msg::new("val.template_source_missing").arg("routine", &r.name));
                 }
                 (RoutineSource::Create, _) => None,
             };

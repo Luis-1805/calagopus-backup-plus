@@ -15,7 +15,7 @@ struct Sim {
 
 impl Sim {
     fn new(template_id: &str, tz: chrono_tz::Tz) -> Self {
-        let template = templates::builtin()
+        let template = templates::builtin(crate::i18n::Lang::De)
             .into_iter()
             .find(|t| t.id == template_id)
             .unwrap();
